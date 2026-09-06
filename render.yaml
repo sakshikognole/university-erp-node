@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: university-erp-node
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: .
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: MONGO_URI
+        value: mongodb+srv://khushbubaraskar2608_db_user:jFKahNQKYyDnXJn4@cluster0.36paoeu.mongodb.net/university-erp?retryWrites=true&w=majority&appName=Cluster0
+      - key: JWT_SECRET
+        value: university_erp_secret_key
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: FRONTEND_URL
+        sync: false    # Set to your Vercel URL after frontend deploy
