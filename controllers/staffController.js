@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Staff = require('../models/Staff');
 const AuditLog = require('../models/AuditLog');
+const { validateStaffFields } = require('../utils/staffValidation');
 
 // Get All Staff Members
 exports.getStaff = async (req, res) => {
@@ -46,20 +47,38 @@ exports.createStaff = async (req, res) => {
       return res.status(400).json({ message: 'Name, Staff ID, Email, Phone, Date of Joining, and Role are required' });
     }
 
+    // Run field-level validation
+    const { errors, isValid } = validateStaffFields({ name, staffId, email, phone, role });
+    if (!isValid) {
+      const firstError = Object.values(errors)[0];
+      return res.status(400).json({ message: firstError, validationErrors: errors });
+    }
+
     const cleanStaffId = staffId.trim().toUpperCase();
     const cleanEmail = email.trim().toLowerCase();
+    const cleanPhone = phone.trim().replace(/\s/g, '');
 
+    // Staff ID uniqueness
     const existingStaff = await Staff.findOne({ staffId: cleanStaffId });
     if (existingStaff) {
-      return res.status(409).json({ 
-        message: `A staff member with ID '${cleanStaffId}' already exists` 
+      return res.status(409).json({
+        message: `A staff member with ID '${cleanStaffId}' already exists`,
       });
     }
 
+    // Email uniqueness
     const existingEmail = await Staff.findOne({ email: cleanEmail });
     if (existingEmail) {
-      return res.status(409).json({ 
-        message: `A staff member with email '${cleanEmail}' already exists` 
+      return res.status(409).json({
+        message: `A staff member with email '${cleanEmail}' already exists`,
+      });
+    }
+
+    // Phone uniqueness
+    const existingPhone = await Staff.findOne({ phone: cleanPhone });
+    if (existingPhone) {
+      return res.status(409).json({
+        message: `A staff member with phone number '${cleanPhone}' already exists`,
       });
     }
 
@@ -67,7 +86,7 @@ exports.createStaff = async (req, res) => {
       name: name.trim(),
       staffId: cleanStaffId,
       email: cleanEmail,
-      phone: phone.trim(),
+      phone: cleanPhone,
       dateOfJoining: new Date(dateOfJoining),
       role: role.trim(),
       bankDetails: {
@@ -106,6 +125,13 @@ exports.updateStaff = async (req, res) => {
       return res.status(400).json({ message: 'Name, Staff ID, Email, Phone, Date of Joining, and Role are required' });
     }
 
+    // Run field-level validation
+    const { errors, isValid } = validateStaffFields({ name, staffId, email, phone, role });
+    if (!isValid) {
+      const firstError = Object.values(errors)[0];
+      return res.status(400).json({ message: firstError, validationErrors: errors });
+    }
+
     let staffMember = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
       staffMember = await Staff.findById(id);
@@ -120,6 +146,7 @@ exports.updateStaff = async (req, res) => {
 
     const cleanStaffId = staffId.trim().toUpperCase();
     const cleanEmail = email.trim().toLowerCase();
+    const cleanPhone = phone.trim().replace(/\s/g, '');
 
     // Check staffId uniqueness if changed
     if (cleanStaffId !== staffMember.staffId) {
@@ -143,8 +170,18 @@ exports.updateStaff = async (req, res) => {
       staffMember.email = cleanEmail;
     }
 
+    // Check phone uniqueness if changed — allow own unchanged phone
+    if (cleanPhone !== staffMember.phone) {
+      const existingPhone = await Staff.findOne({ phone: cleanPhone });
+      if (existingPhone && existingPhone._id.toString() !== staffMember._id.toString()) {
+        return res.status(409).json({
+          message: `A staff member with phone number '${cleanPhone}' already exists`,
+        });
+      }
+      staffMember.phone = cleanPhone;
+    }
+
     staffMember.name = name.trim();
-    staffMember.phone = phone.trim();
     staffMember.dateOfJoining = new Date(dateOfJoining);
     staffMember.role = role.trim();
     if (bankDetails) {

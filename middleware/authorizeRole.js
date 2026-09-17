@@ -1,4 +1,7 @@
 const authorizeRole = (...allowedRoles) => {
+    // Flatten any nested arrays and convert to uppercase strings
+    const flatRoles = allowedRoles.flat(Infinity).map((r) => String(r).toUpperCase());
+
     return (req, res, next) => {
         if (!req.user) {
             return res.status(401).json({
@@ -6,12 +9,14 @@ const authorizeRole = (...allowedRoles) => {
             });
         }
 
-        const userRole = req.user.role;
-        const adminType = req.user.adminType;
+        const userRole = String(req.user.role || '').toUpperCase();
+        const adminType = String(req.user.adminType || '').toUpperCase();
 
         const hasAccess =
-            allowedRoles.includes(userRole) ||
-            allowedRoles.includes(adminType);
+            flatRoles.includes(userRole) ||
+            flatRoles.includes(adminType) ||
+            userRole === 'SUPER_ADMIN' ||
+            adminType === 'SUPER_ADMIN';
 
         if (!hasAccess) {
             return res.status(403).json({

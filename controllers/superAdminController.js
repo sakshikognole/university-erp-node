@@ -8,6 +8,15 @@ const Student = require('../models/Student');
 const Staff = require('../models/Staff');
 const Venue = require('../models/Venue');
 
+// ── Student CRUD: delegate to validated studentController ──────────────────
+const studentController = require('./studentController');
+exports.getStudents      = studentController.getStudents;
+exports.getStudentById   = studentController.getStudentById;
+exports.createStudent    = studentController.createStudent;
+exports.updateStudent    = studentController.updateStudent;
+exports.bulkUploadStudents = studentController.bulkUploadStudents;
+// ──────────────────────────────────────────────────────────────────────────
+
 // Initial default system roles seed
 const defaultSystemRoles = [
   {
@@ -531,6 +540,81 @@ exports.getAuditLogs = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Department field validation — single source of truth for backend rules.
+// Rules mirror those enforced on the frontend.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Validate a Department ID string.
+ * Rules:
+ *  - Must be present and non-empty after trimming.
+ *  - Must be at least 2 characters long.
+ *  - Must NOT be purely numeric (e.g. "0", "123" are rejected).
+ *  - Must contain only letters, digits, and hyphens (e.g. CS-101, DEPT01).
+ * Returns null on success, or an error message string on failure.
+ */
+function validateDepartmentId(raw) {
+  if (!raw || !raw.trim()) {
+    return 'Department ID is required.';
+  }
+  const val = raw.trim();
+  if (val.length < 2) {
+    return 'Department ID must be at least 2 characters.';
+  }
+  // Reject pure numeric values including "0", "123", "-5" etc.
+  if (/^-?\d+$/.test(val)) {
+    return 'Department ID must be alphanumeric (e.g. CS-101). Purely numeric values are not allowed.';
+  }
+  // Allow letters, digits, and hyphens only
+  if (!/^[A-Za-z0-9][A-Za-z0-9\-]*$/.test(val)) {
+    return 'Department ID may only contain letters, digits, and hyphens (e.g. CS-101, ENG-01).';
+  }
+  return null; // valid
+}
+
+/**
+ * Validate a Department Name string.
+ * Rules:
+ *  - Must be present and non-empty after trimming.
+ *  - Must be at least 5 characters long.
+ *  - Must start with a letter.
+ *  - Must consist primarily of letters; allowed extras: spaces, &, -, (, ), /, ., ', ,
+ *  - Must NOT be purely numeric.
+ *  - Must NOT contain digits mixed with letters (e.g. "Computer123", "CSE123").
+ *  - Must NOT be an abbreviation: a string of 1–4 characters that is all uppercase
+ *    letters with no spaces (e.g. "CS", "IT", "EEE", "MECH").
+ * Returns null on success, or an error message string on failure.
+ */
+function validateDepartmentName(raw) {
+  if (!raw || !raw.trim()) {
+    return 'Department Name is required.';
+  }
+  const val = raw.trim();
+
+  if (val.length < 5) {
+    return 'Please enter the full descriptive department name (minimum 5 characters).';
+  }
+  // Must start with a letter
+  if (!/^[A-Za-z]/.test(val)) {
+    return 'Please enter a valid department name.';
+  }
+  // Must not contain digits at all — rejects "Computer123", "123Computer", "CSE123"
+  if (/\d/.test(val)) {
+    return 'Please enter a valid department name in the specified format. Digits are not allowed in department names.';
+  }
+  // Must not contain characters outside the allowed set
+  // Allowed: letters, space, &, -, (, ), /, ., ', ,
+  if (!/^[A-Za-z\s&\-().\/,'\u0026]+$/.test(val)) {
+    return 'Please enter a valid department name. Only letters, spaces, and standard punctuation (&, -, /, etc.) are allowed.';
+  }
+  // Reject abbreviations: 1–4 all-uppercase letters with no spaces
+  if (/^[A-Z]{1,4}$/.test(val)) {
+    return 'Please enter the full descriptive department name (e.g. "Computer Science" instead of "CS").';
+  }
+  return null; // valid
+}
+
 // Get All Departments
 exports.getDepartments = async (req, res) => {
   try {
@@ -547,17 +631,26 @@ exports.createDepartment = async (req, res) => {
   try {
     const { departmentId, name } = req.body;
 
-    if (!departmentId || !name) {
-      return res.status(400).json({ message: 'Department ID and Department Name are required' });
+    // Validate Department ID
+    const deptIdError = validateDepartmentId(departmentId);
+    if (deptIdError) {
+      return res.status(400).json({ message: deptIdError });
+    }
+
+    // Validate Department Name
+    const nameError = validateDepartmentName(name);
+    if (nameError) {
+      return res.status(400).json({ message: nameError });
     }
 
     const cleanDeptId = departmentId.trim().toUpperCase();
     const cleanName = name.trim();
 
+    // Check for duplicate Department ID
     const existingDept = await Department.findOne({ departmentId: cleanDeptId });
     if (existingDept) {
       return res.status(409).json({ 
-        message: `A department with ID '${cleanDeptId}' already exists in the database` 
+        message: `This Department ID already exists. Please use a unique Department ID.`,
       });
     }
 
@@ -579,6 +672,10 @@ exports.createDepartment = async (req, res) => {
       department: newDepartment,
     });
   } catch (error) {
+    // Handle MongoDB duplicate key error gracefully (DEF-007)
+    if (error.code === 11000) {
+      return res.status(409).json({ message: 'This Department ID already exists. Please use a unique Department ID.' });
+    }
     console.error('Create Department Error:', error);
     return res.status(500).json({ message: 'Server error creating department' });
   }
@@ -590,8 +687,16 @@ exports.updateDepartment = async (req, res) => {
     const { id } = req.params;
     const { departmentId, name } = req.body;
 
-    if (!departmentId || !name) {
-      return res.status(400).json({ message: 'Department ID and Department Name are required' });
+    // Validate Department ID (DEF-009, DEF-013)
+    const deptIdError = validateDepartmentId(departmentId);
+    if (deptIdError) {
+      return res.status(400).json({ message: deptIdError });
+    }
+
+    // Validate Department Name (DEF-010, DEF-011, DEF-012, DEF-014)
+    const nameError = validateDepartmentName(name);
+    if (nameError) {
+      return res.status(400).json({ message: nameError });
     }
 
     const department = await Department.findById(id);
@@ -606,7 +711,7 @@ exports.updateDepartment = async (req, res) => {
       const existingDept = await Department.findOne({ departmentId: cleanDeptId });
       if (existingDept) {
         return res.status(409).json({ 
-          message: `A department with ID '${cleanDeptId}' already exists in the database` 
+          message: 'This Department ID already exists. Please use a unique Department ID.',
         });
       }
       department.departmentId = cleanDeptId;
@@ -628,6 +733,10 @@ exports.updateDepartment = async (req, res) => {
       department,
     });
   } catch (error) {
+    // Handle MongoDB duplicate key error gracefully
+    if (error.code === 11000) {
+      return res.status(409).json({ message: 'This Department ID already exists. Please use a unique Department ID.' });
+    }
     console.error('Update Department Error:', error);
     return res.status(500).json({ message: 'Server error updating department' });
   }
@@ -669,150 +778,7 @@ exports.deleteDepartment = async (req, res) => {
   }
 };
 
-// Create New Student
-exports.createStudent = async (req, res) => {
-  try {
-    const { name, prn, class: studentClass, division, degree, yearOfEnrollment, customFields } = req.body;
-
-    if (!name || !prn || !studentClass || !degree || !yearOfEnrollment) {
-      return res.status(400).json({ message: 'Name, PRN, Class, Degree, and Year of Enrollment are required' });
-    }
-
-    const cleanPrn = prn.trim().toUpperCase();
-
-    const existingStudent = await Student.findOne({ prn: cleanPrn });
-    if (existingStudent) {
-      return res.status(409).json({ 
-        message: `A student with PRN '${cleanPrn}' already exists` 
-      });
-    }
-
-    const newStudent = await Student.create({
-      name: name.trim(),
-      prn: cleanPrn,
-      class: studentClass.trim(),
-      division: division?.trim() || '',
-      degree: degree.trim(),
-      yearOfEnrollment: yearOfEnrollment.trim(),
-      customFields: customFields || [],
-    });
-
-    await AuditLog.create({
-      action: 'STUDENT_CREATED',
-      performedBy: req.user?.email || 'superadmin@university.edu',
-      target: `${newStudent.name} (${newStudent.prn})`,
-      status: 'SUCCESS',
-      details: `Created new student ${newStudent.prn}`,
-    });
-
-    return res.status(201).json({
-      message: `Student '${newStudent.name}' added successfully`,
-      student: newStudent,
-    });
-  } catch (error) {
-    console.error('Create Student Error:', error);
-    return res.status(500).json({ message: 'Server error creating student' });
-  }
-};
-
-// Get All Students
-exports.getStudents = async (req, res) => {
-  try {
-    const students = await Student.find().sort({ createdAt: -1 });
-    return res.status(200).json(students);
-  } catch (error) {
-    console.error('Get Students Error:', error);
-    return res.status(500).json({ message: 'Error fetching students from database' });
-  }
-};
-
-// Get Single Student by ID or PRN
-exports.getStudentById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    let student = null;
-
-    if (mongoose.Types.ObjectId.isValid(id)) {
-      student = await Student.findById(id);
-    }
-    if (!student) {
-      student = await Student.findOne({ prn: id.trim().toUpperCase() });
-    }
-
-    if (!student) {
-      return res.status(404).json({ message: 'Student not found' });
-    }
-
-    return res.status(200).json(student);
-  } catch (error) {
-    console.error('Get Student Error:', error);
-    return res.status(500).json({ message: 'Error fetching student details' });
-  }
-};
-
-// Update Student
-exports.updateStudent = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, prn, class: studentClass, division, degree, yearOfEnrollment, customFields } = req.body;
-
-    if (!name || !prn || !studentClass || !degree || !yearOfEnrollment) {
-      return res.status(400).json({ message: 'Name, PRN, Class, Degree, and Year of Enrollment are required' });
-    }
-
-    let student = null;
-    if (mongoose.Types.ObjectId.isValid(id)) {
-      student = await Student.findById(id);
-    }
-    if (!student) {
-      student = await Student.findOne({ prn: id.trim().toUpperCase() });
-    }
-
-    if (!student) {
-      return res.status(404).json({ message: 'Student not found' });
-    }
-
-    const cleanPrn = prn.trim().toUpperCase();
-
-    // If PRN changed, check uniqueness
-    if (cleanPrn !== student.prn) {
-      const existingStudent = await Student.findOne({ prn: cleanPrn });
-      if (existingStudent && existingStudent._id.toString() !== student._id.toString()) {
-        return res.status(409).json({
-          message: `A student with PRN '${cleanPrn}' already exists`,
-        });
-      }
-      student.prn = cleanPrn;
-    }
-
-    student.name = name.trim();
-    student.class = studentClass.trim();
-    student.division = division !== undefined ? division.trim() : student.division;
-    student.degree = degree.trim();
-    student.yearOfEnrollment = yearOfEnrollment.trim();
-    if (Array.isArray(customFields)) {
-      student.customFields = customFields;
-    }
-
-    await student.save();
-
-    await AuditLog.create({
-      action: 'STUDENT_UPDATED',
-      performedBy: req.user?.email || 'superadmin@university.edu',
-      target: `${student.name} (${student.prn})`,
-      status: 'SUCCESS',
-      details: `Updated student record for ${student.prn}`,
-    });
-
-    return res.status(200).json({
-      message: `Student '${student.name}' updated successfully`,
-      student,
-    });
-  } catch (error) {
-    console.error('Update Student Error:', error);
-    return res.status(500).json({ message: 'Server error updating student' });
-  }
-};
+// Student CRUD functions are delegated at the top of this file via studentController.
 
 // Get All Staff Members
 exports.getStaff = async (req, res) => {
@@ -988,93 +954,7 @@ exports.updateStaff = async (req, res) => {
   }
 };
 
-// Bulk Upload Students
-exports.bulkUploadStudents = async (req, res) => {
-  try {
-    const { students } = req.body;
-
-    if (!students || !Array.isArray(students) || students.length === 0) {
-      return res.status(400).json({ message: 'Students array is required and must not be empty' });
-    }
-
-    const results = {
-      created: 0,
-      failed: 0,
-      details: [],
-    };
-
-    for (const studentData of students) {
-      try {
-        const { name, prn, class: studentClass, division, degree, yearOfEnrollment, customFields } = studentData;
-
-        if (!name || !prn || !studentClass || !degree || !yearOfEnrollment) {
-          results.failed++;
-          results.details.push({
-            prn: prn || 'Unknown',
-            status: 'FAILED',
-            reason: 'Missing required fields',
-          });
-          continue;
-        }
-
-        const cleanPrn = prn.trim().toUpperCase();
-
-        const existingStudent = await Student.findOne({ prn: cleanPrn });
-        if (existingStudent) {
-          results.failed++;
-          results.details.push({
-            prn: cleanPrn,
-            status: 'FAILED',
-            reason: 'PRN already exists',
-          });
-          continue;
-        }
-
-        await Student.create({
-          name: name.trim(),
-          prn: cleanPrn,
-          class: studentClass.trim(),
-          division: division?.trim() || '',
-          degree: degree.trim(),
-          yearOfEnrollment: yearOfEnrollment.trim(),
-          customFields: customFields || [],
-        });
-
-        results.created++;
-        results.details.push({
-          prn: cleanPrn,
-          status: 'SUCCESS',
-          reason: 'Student created successfully',
-        });
-      } catch (err) {
-        results.failed++;
-        results.details.push({
-          prn: studentData.prn || 'Unknown',
-          status: 'FAILED',
-          reason: err.message,
-        });
-      }
-    }
-
-    await AuditLog.create({
-      action: 'BULK_STUDENT_UPLOAD',
-      performedBy: req.user?.email || 'superadmin@university.edu',
-      target: `${results.created} students`,
-      status: results.created > 0 ? 'SUCCESS' : 'FAILED',
-      details: `Bulk upload: ${results.created} created, ${results.failed} failed`,
-    });
-
-    return res.status(results.created > 0 ? 201 : 400).json({
-      message: `Bulk upload completed: ${results.created} students created, ${results.failed} failed`,
-      created: results.created,
-      failed: results.failed,
-      details: results.details,
-    });
-  } catch (error) {
-    console.error('Bulk Upload Students Error:', error);
-    return res.status(500).json({ message: 'Server error during bulk upload' });
-  }
-};
+// (bulkUploadStudents is delegated at top of file via studentController)
 
 // Get All Venues
 exports.getVenues = async (req, res) => {
@@ -1111,6 +991,11 @@ exports.getVenueById = async (req, res) => {
   }
 };
 
+// Venue ID format: uppercase alphanumeric segments separated by hyphens (e.g. HALL-101, LAB-CS-01)
+const VENUE_ID_REGEX = /^[A-Z0-9]{1,10}(-[A-Z0-9]{1,10}){0,4}$/;
+// Venue name: starts with a letter, allows letters/digits/spaces and basic punctuation
+const VENUE_NAME_REGEX = /^[A-Za-z][A-Za-z0-9 ,.\-'()]{1,99}$/;
+
 // Create New Venue
 exports.createVenue = async (req, res) => {
   try {
@@ -1120,11 +1005,23 @@ exports.createVenue = async (req, res) => {
       return res.status(400).json({ message: 'Venue ID, Name, Capacity, and Status are required' });
     }
 
+    const cleanVenueId = venueId.trim().toUpperCase();
+
+    if (!VENUE_ID_REGEX.test(cleanVenueId)) {
+      return res.status(400).json({
+        message: 'Venue ID must contain only letters and digits, optionally separated by hyphens (e.g. HALL-101, LAB-CS-01)',
+      });
+    }
+
+    if (!VENUE_NAME_REGEX.test(name.trim())) {
+      return res.status(400).json({
+        message: 'Venue Name must start with a letter and contain only letters, digits, spaces, or basic punctuation',
+      });
+    }
+
     if (capacity < 1) {
       return res.status(400).json({ message: 'Capacity must be at least 1' });
     }
-
-    const cleanVenueId = venueId.trim().toUpperCase();
 
     const existingVenue = await Venue.findOne({ venueId: cleanVenueId });
     if (existingVenue) {
@@ -1174,6 +1071,20 @@ exports.updateVenue = async (req, res) => {
       return res.status(400).json({ message: 'Venue ID, Name, Capacity, and Status are required' });
     }
 
+    const cleanVenueId = venueId.trim().toUpperCase();
+
+    if (!VENUE_ID_REGEX.test(cleanVenueId)) {
+      return res.status(400).json({
+        message: 'Venue ID must contain only letters and digits, optionally separated by hyphens (e.g. HALL-101, LAB-CS-01)',
+      });
+    }
+
+    if (!VENUE_NAME_REGEX.test(name.trim())) {
+      return res.status(400).json({
+        message: 'Venue Name must start with a letter and contain only letters, digits, spaces, or basic punctuation',
+      });
+    }
+
     if (capacity < 1) {
       return res.status(400).json({ message: 'Capacity must be at least 1' });
     }
@@ -1189,8 +1100,6 @@ exports.updateVenue = async (req, res) => {
     if (!venue) {
       return res.status(404).json({ message: 'Venue not found' });
     }
-
-    const cleanVenueId = venueId.trim().toUpperCase();
 
     // If venueId changed, check uniqueness
     if (cleanVenueId !== venue.venueId) {
@@ -1298,17 +1207,37 @@ exports.bulkUploadVenues = async (req, res) => {
           continue;
         }
 
+        const cleanVenueId = venueId.trim().toUpperCase();
+
+        if (!VENUE_ID_REGEX.test(cleanVenueId)) {
+          results.failed++;
+          results.details.push({
+            venueId: cleanVenueId,
+            status: 'failed',
+            reason: 'Invalid Venue ID format (use letters/digits separated by hyphens, e.g. HALL-101)',
+          });
+          continue;
+        }
+
+        if (!VENUE_NAME_REGEX.test(name.trim())) {
+          results.failed++;
+          results.details.push({
+            venueId: cleanVenueId,
+            status: 'failed',
+            reason: 'Invalid Venue Name (must start with a letter; only letters, digits, spaces, or basic punctuation allowed)',
+          });
+          continue;
+        }
+
         if (capacity < 1) {
           results.failed++;
           results.details.push({
-            venueId,
+            venueId: cleanVenueId,
             status: 'failed',
             reason: 'Capacity must be at least 1',
           });
           continue;
         }
-
-        const cleanVenueId = venueId.trim().toUpperCase();
 
         const existingVenue = await Venue.findOne({ venueId: cleanVenueId });
         if (existingVenue) {
@@ -1369,90 +1298,4 @@ exports.bulkUploadVenues = async (req, res) => {
   }
 };
 
-// Bulk Upload Students
-exports.bulkUploadStudents = async (req, res) => {
-  try {
-    const { students } = req.body;
-
-    if (!students || !Array.isArray(students) || students.length === 0) {
-      return res.status(400).json({ message: 'Students array is required and must not be empty' });
-    }
-
-    const results = {
-      created: 0,
-      failed: 0,
-      details: [],
-    };
-
-    for (const studentData of students) {
-      try {
-        const { name, prn, class: studentClass, division, degree, yearOfEnrollment, customFields } = studentData;
-
-        if (!name || !prn || !studentClass || !degree || !yearOfEnrollment) {
-          results.failed++;
-          results.details.push({
-            prn: prn || 'Unknown',
-            status: 'FAILED',
-            reason: 'Missing required fields',
-          });
-          continue;
-        }
-
-        const cleanPrn = prn.trim().toUpperCase();
-
-        const existingStudent = await Student.findOne({ prn: cleanPrn });
-        if (existingStudent) {
-          results.failed++;
-          results.details.push({
-            prn: cleanPrn,
-            status: 'FAILED',
-            reason: 'PRN already exists',
-          });
-          continue;
-        }
-
-        await Student.create({
-          name: name.trim(),
-          prn: cleanPrn,
-          class: studentClass.trim(),
-          division: division?.trim() || '',
-          degree: degree.trim(),
-          yearOfEnrollment: yearOfEnrollment.trim(),
-          customFields: customFields || [],
-        });
-
-        results.created++;
-        results.details.push({
-          prn: cleanPrn,
-          status: 'SUCCESS',
-          reason: 'Student created successfully',
-        });
-      } catch (err) {
-        results.failed++;
-        results.details.push({
-          prn: studentData.prn || 'Unknown',
-          status: 'FAILED',
-          reason: err.message,
-        });
-      }
-    }
-
-    await AuditLog.create({
-      action: 'BULK_STUDENT_UPLOAD',
-      performedBy: req.user?.email || 'superadmin@university.edu',
-      target: `${results.created} students`,
-      status: results.created > 0 ? 'SUCCESS' : 'FAILED',
-      details: `Bulk upload: ${results.created} created, ${results.failed} failed`,
-    });
-
-    return res.status(results.created > 0 ? 201 : 400).json({
-      message: `Bulk upload completed: ${results.created} students created, ${results.failed} failed`,
-      created: results.created,
-      failed: results.failed,
-      details: results.details,
-    });
-  } catch (error) {
-    console.error('Bulk Upload Students Error:', error);
-    return res.status(500).json({ message: 'Server error during bulk upload' });
-  }
-};
+// (bulkUploadStudents delegated at top of file via studentController)

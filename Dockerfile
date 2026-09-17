@@ -1,21 +1,18 @@
-# ── Stage 1: Install dependencies ─────────────────────────
-FROM node:18-alpine AS deps
+FROM node:20-alpine
+
 WORKDIR /app
+
+# Copy package files
 COPY package*.json ./
-RUN npm install --omit=dev
 
-# ── Stage 2: Production image ──────────────────────────────
-FROM node:18-alpine AS runner
-WORKDIR /app
+# Install dependencies
+RUN npm install
 
-# Copy only production node_modules from stage 1
-COPY --from=deps /app/node_modules ./node_modules
-
-# Copy application source
+# Copy source code
 COPY . .
 
-# Remove .env if accidentally included (use docker-compose env_file instead)
-RUN rm -f .env .env.local
-
+# Expose port
 EXPOSE 5000
+
+# Start server
 CMD ["node", "server.js"]

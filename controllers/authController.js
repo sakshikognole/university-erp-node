@@ -39,8 +39,12 @@ exports.adminLogin = async (req, res) => {
       return res.status(400).json({ message: 'Email, password, and admin type are required' });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
-    const user = await User.findOne({ email: normalizedEmail });
+    if (/[A-Z]/.test(email)) {
+      return res.status(400).json({ message: 'Email ID field accepts only lowercase letters' });
+    }
+
+    const normalizedEmail = email.trim();
+    const user = await User.findOne({ email: normalizedEmail }).lean();
 
     if (!user) {
       return res.status(401).json({ message: 'Invalid email or password' });
@@ -68,14 +72,14 @@ exports.adminLogin = async (req, res) => {
       });
     }
 
-    // Log login activity
-    await AuditLog.create({
+    // Non-blocking Audit Log creation
+    AuditLog.create({
       action: 'ADMIN_LOGIN',
       performedBy: user.email,
       target: `Admin Portal (${adminType})`,
       status: 'SUCCESS',
       details: `${user.name} logged in as ${adminType}`,
-    });
+    }).catch(err => console.error('AuditLog error:', err.message));
 
     return res.status(200).json({
       message: 'Admin login successful',

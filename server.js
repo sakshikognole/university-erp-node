@@ -1,6 +1,5 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const dns = require('dns');
 try {
@@ -15,27 +14,20 @@ const cors = require('cors');
 
 const authRoutes = require('./routes/authRoutes');
 const superAdminRoutes = require('./routes/superAdminRoutes');
+const passwordManagementRoutes = require('./routes/passwordManagementRoutes');
 const venueRoutes = require('./routes/venueRoutes');
+const eventNoticeRoutes = require('./routes/eventNoticeRoutes');
+const feePaymentRoutes = require('./routes/feePaymentRoutes');
+const transportRoutes = require('./routes/transportRoutes');
+const alumniRoutes = require('./routes/alumniRoutes');
+const alumniJobRoutes = require('./routes/alumniJobRoutes');
+const systemAnnouncementRoutes = require('./routes/systemAnnouncementRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-const allowedOrigins = [
-  'http://localhost:5173',                                    // local dev
-  'http://localhost:4173',                                    // vite preview
-  process.env.FRONTEND_URL,                                   // set on Render
-].filter(Boolean);
-
-app.use(cors({
-  origin: (origin, callback) => {
-    // allow requests with no origin (curl, Postman, server-to-server)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error(`CORS: origin ${origin} not allowed`));
-  },
-  credentials: true,
-}));
+app.use(cors());
 app.use(express.json());
 
 // Routes
@@ -45,7 +37,25 @@ app.get('/', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/super-admin', superAdminRoutes);
+// Password Management demo module — isolated from existing auth routes
+app.use('/api/password-mgmt', passwordManagementRoutes);
 app.use('/api/venues', venueRoutes);
+app.use('/api/events', eventNoticeRoutes);
+app.use('/api/fee-payments', feePaymentRoutes);
+app.use('/api/payment', feePaymentRoutes);
+app.use('/api/transport', transportRoutes);
+app.use('/api/alumni', alumniRoutes);
+app.use('/api/alumni-jobs', alumniJobRoutes);
+app.use('/api/system-announcements', systemAnnouncementRoutes);
+
+// Fallback for non-API web routes (redirect browser navigation to frontend)
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+app.use((req, res, next) => {
+  if (req.method === 'GET' && !req.path.startsWith('/api')) {
+    return res.redirect(`${FRONTEND_URL}${req.originalUrl}`);
+  }
+  next();
+});
 
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/template-db';

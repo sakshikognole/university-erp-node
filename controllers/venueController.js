@@ -2,6 +2,11 @@ const mongoose = require('mongoose');
 const Venue = require('../models/Venue');
 const AuditLog = require('../models/AuditLog');
 
+// Venue ID format: uppercase alphanumeric segments separated by hyphens (e.g. HALL-101, LAB-CS-01)
+const VENUE_ID_REGEX = /^[A-Z0-9]{1,10}(-[A-Z0-9]{1,10}){0,4}$/;
+// Venue name: starts with a letter, allows letters/digits/spaces and basic punctuation
+const VENUE_NAME_REGEX = /^[A-Za-z][A-Za-z0-9 ,.\-'()]{1,99}$/;
+
 // Get All Venues
 exports.getVenues = async (req, res) => {
   try {
@@ -46,11 +51,23 @@ exports.createVenue = async (req, res) => {
       return res.status(400).json({ message: 'Venue ID, Name, Capacity, and Status are required' });
     }
 
+    const cleanVenueId = venueId.trim().toUpperCase();
+
+    if (!VENUE_ID_REGEX.test(cleanVenueId)) {
+      return res.status(400).json({
+        message: 'Venue ID must contain only letters and digits, optionally separated by hyphens (e.g. HALL-101, LAB-CS-01)',
+      });
+    }
+
+    if (!VENUE_NAME_REGEX.test(name.trim())) {
+      return res.status(400).json({
+        message: 'Venue Name must start with a letter and contain only letters, digits, spaces, or basic punctuation',
+      });
+    }
+
     if (capacity < 1) {
       return res.status(400).json({ message: 'Capacity must be at least 1' });
     }
-
-    const cleanVenueId = venueId.trim().toUpperCase();
 
     const existingVenue = await Venue.findOne({ venueId: cleanVenueId });
     if (existingVenue) {
@@ -100,6 +117,20 @@ exports.updateVenue = async (req, res) => {
       return res.status(400).json({ message: 'Venue ID, Name, Capacity, and Status are required' });
     }
 
+    const cleanVenueId = venueId.trim().toUpperCase();
+
+    if (!VENUE_ID_REGEX.test(cleanVenueId)) {
+      return res.status(400).json({
+        message: 'Venue ID must contain only letters and digits, optionally separated by hyphens (e.g. HALL-101, LAB-CS-01)',
+      });
+    }
+
+    if (!VENUE_NAME_REGEX.test(name.trim())) {
+      return res.status(400).json({
+        message: 'Venue Name must start with a letter and contain only letters, digits, spaces, or basic punctuation',
+      });
+    }
+
     if (capacity < 1) {
       return res.status(400).json({ message: 'Capacity must be at least 1' });
     }
@@ -115,8 +146,6 @@ exports.updateVenue = async (req, res) => {
     if (!venue) {
       return res.status(404).json({ message: 'Venue not found' });
     }
-
-    const cleanVenueId = venueId.trim().toUpperCase();
 
     // If venueId changed, check uniqueness
     if (cleanVenueId !== venue.venueId) {
@@ -224,17 +253,37 @@ exports.bulkCreateVenues = async (req, res) => {
           continue;
         }
 
+        const cleanVenueId = venueId.trim().toUpperCase();
+
+        if (!VENUE_ID_REGEX.test(cleanVenueId)) {
+          results.failed++;
+          results.details.push({
+            venueId: cleanVenueId,
+            status: 'failed',
+            reason: 'Invalid Venue ID format (use letters/digits separated by hyphens, e.g. HALL-101)',
+          });
+          continue;
+        }
+
+        if (!VENUE_NAME_REGEX.test(name.trim())) {
+          results.failed++;
+          results.details.push({
+            venueId: cleanVenueId,
+            status: 'failed',
+            reason: 'Invalid Venue Name (must start with a letter; only letters, digits, spaces, or basic punctuation allowed)',
+          });
+          continue;
+        }
+
         if (capacity < 1) {
           results.failed++;
           results.details.push({
-            venueId,
+            venueId: cleanVenueId,
             status: 'failed',
             reason: 'Capacity must be at least 1',
           });
           continue;
         }
-
-        const cleanVenueId = venueId.trim().toUpperCase();
 
         const existingVenue = await Venue.findOne({ venueId: cleanVenueId });
         if (existingVenue) {
