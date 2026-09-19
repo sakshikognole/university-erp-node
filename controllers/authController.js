@@ -43,7 +43,7 @@ exports.adminLogin = async (req, res) => {
       return res.status(400).json({ message: 'Email ID field accepts only lowercase letters' });
     }
 
-    const normalizedEmail = email.trim();
+    const normalizedEmail = email.trim().toLowerCase();
     const user = await User.findOne({ email: normalizedEmail }).lean();
 
     if (!user) {
