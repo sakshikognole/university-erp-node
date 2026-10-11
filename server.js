@@ -23,6 +23,9 @@ const alumniRoutes = require('./routes/alumniRoutes');
 const alumniJobRoutes = require('./routes/alumniJobRoutes');
 const systemAnnouncementRoutes = require('./routes/systemAnnouncementRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
+const announcementRoutes = require('./routes/announcementRoutes');
+const submissionRoutes = require('./routes/submissionRoutes');
+const academicResourceRoutes = require('./routes/academicResourceRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -49,6 +52,9 @@ app.use('/api/alumni', alumniRoutes);
 app.use('/api/alumni-jobs', alumniJobRoutes);
 app.use('/api/system-announcements', systemAnnouncementRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/announcements', announcementRoutes);
+app.use('/api/submissions', submissionRoutes);
+app.use('/api/resources', academicResourceRoutes);
 
 // Fallback for non-API web routes (redirect browser navigation to frontend)
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
