@@ -25,7 +25,7 @@ const DEMO_EMAILS = {
 };
 
 // The test OTP used in development/demo mode.
-const TEST_OTP = '000000';
+// Removed test OTP constant – real OTP will be generated per request.
 
 /**
  * Helper — fetch a demo user by flow key ('firsttime' | 'login').
@@ -39,7 +39,7 @@ const getDemoUser = async (flow) => {
 
 // ---------------------------------------------------------------------------
 // POST /api/password-mgmt/firsttime/init
-// Validates that the current (default) password matches, then issues a test OTP.
+// Validates that the current (default) password matches, then issues a real OTP.
 // ---------------------------------------------------------------------------
 exports.initFirstTime = async (req, res) => {
   try {
@@ -64,16 +64,21 @@ exports.initFirstTime = async (req, res) => {
       });
     }
 
-    // Store the test OTP on the user document (15-minute expiry).
-    user.otp = TEST_OTP;
+    // Generate a real 6‑digit OTP and store it (15‑minute expiry).
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.otp = otp;
     user.otpExpires = new Date(Date.now() + 15 * 60 * 1000);
     await user.save();
+    // Send OTP email to the hard‑coded address.
+    try {
+      const { sendOtpEmail } = require('../utils/email');
+      await sendOtpEmail('khushbubaraskar2608@gmail.com', otp);
+    } catch (e) {
+      console.error('Failed to send OTP email:', e);
+    }
 
     return res.status(200).json({
-      message: 'Current password verified. OTP has been generated for testing.',
-      // In a real system, the OTP would be emailed/SMSed — not returned here.
-      // We expose it only because this is a test/demo mode.
-      testOtp: TEST_OTP,
+      message: 'Current password verified. OTP has been sent to the designated email.',
     });
   } catch (error) {
     console.error('[PM] initFirstTime error:', error);
@@ -83,7 +88,7 @@ exports.initFirstTime = async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // POST /api/password-mgmt/login/init
-// Issues a test OTP for the normal-login demo account.
+// Issues a real OTP for the normal‑login demo account.
 // ---------------------------------------------------------------------------
 exports.initLogin = async (req, res) => {
   try {
@@ -94,14 +99,21 @@ exports.initLogin = async (req, res) => {
       });
     }
 
-    // Store the test OTP on the user document (15-minute expiry).
-    user.otp = TEST_OTP;
+    // Generate a real OTP and store it (15‑minute expiry).
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.otp = otp;
     user.otpExpires = new Date(Date.now() + 15 * 60 * 1000);
     await user.save();
+    // Send OTP email to the hard‑coded address.
+    try {
+      const { sendOtpEmail } = require('../utils/email');
+      await sendOtpEmail('khushbubaraskar2608@gmail.com', otp);
+    } catch (e) {
+      console.error('Failed to send OTP email:', e);
+    }
 
     return res.status(200).json({
-      message: 'OTP has been generated for testing.',
-      testOtp: TEST_OTP,
+      message: 'OTP has been sent to the designated email.',
     });
   } catch (error) {
     console.error('[PM] initLogin error:', error);
@@ -139,17 +151,16 @@ exports.verifyOtp = async (req, res) => {
       });
     }
 
-    // Accept the universal test OTP OR a valid unexpired DB OTP.
-    const isTestOtp = otp === TEST_OTP;
+    // Accept only a valid unexpired DB OTP.
     const isDbOtpValid =
       user.otp &&
       user.otp === otp &&
       user.otpExpires &&
       new Date() <= new Date(user.otpExpires);
 
-    if (!isTestOtp && !isDbOtpValid) {
+    if (!isDbOtpValid) {
       return res.status(400).json({
-        message: 'Invalid or expired OTP. For testing, use OTP: 000000',
+        message: 'Invalid or expired OTP.',
       });
     }
 

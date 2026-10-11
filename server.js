@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const path = require('path');
 
 const dns = require('dns');
@@ -22,6 +22,7 @@ const transportRoutes = require('./routes/transportRoutes');
 const alumniRoutes = require('./routes/alumniRoutes');
 const alumniJobRoutes = require('./routes/alumniJobRoutes');
 const systemAnnouncementRoutes = require('./routes/systemAnnouncementRoutes');
+const attendanceRoutes = require('./routes/attendanceRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -47,6 +48,7 @@ app.use('/api/transport', transportRoutes);
 app.use('/api/alumni', alumniRoutes);
 app.use('/api/alumni-jobs', alumniJobRoutes);
 app.use('/api/system-announcements', systemAnnouncementRoutes);
+app.use('/api/attendance', attendanceRoutes);
 
 // Fallback for non-API web routes (redirect browser navigation to frontend)
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';

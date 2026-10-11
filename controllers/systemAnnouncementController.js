@@ -18,6 +18,31 @@ const logAudit = async (action, req, details) => {
   }
 };
 
+// ── Shared title validation (mirrors announcementValidation.js on the frontend)
+// Uses plain JS / Node.js regex with the 'u' flag for Unicode property escapes.
+const ALLOWED_CHAR_RE   = /^[\p{L}\p{N}\p{M} \-'",.:;()/&#!?"""''\u2013\u2014]+$/u;
+const HAS_LETTER_RE     = /\p{L}/u;
+const PURE_NUMERIC_RE   = /^[\d\s]+$/;
+
+const validateTitle = (raw) => {
+  const v = (raw || '').trim();
+  if (!v) return 'Title is required.';
+  if (PURE_NUMERIC_RE.test(v))
+    return 'This field does not accept pure numeric values.';
+  const hasLetter  = HAS_LETTER_RE.test(v);
+  const hasDigit   = /\d/.test(v);
+  const hasSpecial = /[^\p{L}\p{N}\s]/u.test(v);
+  if (!hasLetter && !hasDigit && hasSpecial)
+    return 'This field does not accept only special characters. Please enter a valid announcement title.';
+  if (!hasLetter && hasDigit && hasSpecial)
+    return 'This field does not accept a combination of special characters and numeric values. Please enter a valid announcement title.';
+  if (!ALLOWED_CHAR_RE.test(v))
+    return 'Please enter a valid announcement title.';
+  if (!hasLetter)
+    return 'Please enter a valid announcement title.';
+  return null; // valid
+};
+
 // ── ID generator ──────────────────────────────────────────────────────────────
 const generateAnnouncementId = async () => {
   const prefix = 'ANN';
@@ -159,6 +184,9 @@ exports.createAnnouncement = async (req, res) => {
     if (!title || !title.trim()) {
       return res.status(400).json({ message: 'Title is required.' });
     }
+
+    const titleErr = validateTitle(title);
+    if (titleErr) return res.status(400).json({ message: titleErr });
 
     // At least one of description or file URL must be provided
     const hasDescription = description && description.trim().length > 0;
@@ -316,7 +344,9 @@ exports.updateAnnouncement = async (req, res) => {
     const { title, departments, description, fileUrl } = req.body;
 
     if (title !== undefined) {
-      if (!title.trim()) return res.status(400).json({ message: 'Title cannot be empty.' });
+      if (!title.trim()) return res.status(400).json({ message: 'Title is required.' });
+      const titleErr = validateTitle(title);
+      if (titleErr) return res.status(400).json({ message: titleErr });
       announcement.title = title.trim();
     }
 

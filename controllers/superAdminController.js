@@ -992,7 +992,8 @@ exports.getVenueById = async (req, res) => {
 };
 
 // Venue ID format: uppercase alphanumeric segments separated by hyphens (e.g. HALL-101, LAB-CS-01)
-const VENUE_ID_REGEX = /^[A-Z0-9]{1,10}(-[A-Z0-9]{1,10}){0,4}$/;
+// The ID must contain at least one letter AND at least one digit.
+const VENUE_ID_REGEX = /^(?=[A-Z0-9-]*[A-Z])(?=[A-Z0-9-]*[0-9])[A-Z0-9]{1,10}(-[A-Z0-9]{1,10}){0,4}$/;
 // Venue name: starts with a letter, allows letters/digits/spaces and basic punctuation
 const VENUE_NAME_REGEX = /^[A-Za-z][A-Za-z0-9 ,.\-'()]{1,99}$/;
 

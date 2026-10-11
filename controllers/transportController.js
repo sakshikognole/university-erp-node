@@ -1,8 +1,88 @@
 const BusRoute = require('../models/BusRoute');
-const Driver = require('../models/Driver');
-const Vehicle = require('../models/Vehicle');
-const BusPass = require('../models/BusPass');
-const Student = require('../models/Student');
+const Driver   = require('../models/Driver');
+const Vehicle  = require('../models/Vehicle');
+const BusPass  = require('../models/BusPass');
+const Student  = require('../models/Student');
+
+// ── Shared backend validation (mirrors transportValidation.js on the frontend) ──
+
+const ROUTE_NAME_RE = /^[\p{L}\p{N}\s\-,()/:]+$/u;
+const DRIVER_NAME_RE = /^[\p{L}\s\-'.]+$/u;
+const HAS_LETTER = /\p{L}/u;
+const HAS_ALNUM  = /[\p{L}\p{N}]/u;
+const CONTACT_RE = /^\+91 \d{10}$/;
+const LICENSE_RE = /^[A-Z]{2}[-/ ]?\d{2}[-/ ]?\d{4}[-/ ]?\d{7}$/i;
+const VEHICLE_ID_RE = /^[\p{L}\p{N}\-]+$/u;
+const VEHICLE_NAME_RE = /^[\p{L}\p{N}\s\-.]+$/u;
+const REG_RE  = /^[A-Z]{2}[- ]?\d{1,2}[- ]?[A-Z]{1,3}[- ]?\d{1,4}$/i;
+const PASS_ID_RE = /^BP-\d{4}$/i;
+
+const validateRouteName = (v) => {
+  const t = (v || '').trim();
+  if (!t) return 'Route Name is required.';
+  if (!HAS_ALNUM.test(t)) return 'Route Name must contain at least one letter or digit.';
+  if (!ROUTE_NAME_RE.test(t)) return 'Route Name contains unsupported characters.';
+  return null;
+};
+
+const validateDriverName = (v) => {
+  const t = (v || '').trim();
+  if (!t) return 'Enter a valid driver name.';
+  if (!HAS_LETTER.test(t)) return 'Enter a valid driver name.';
+  if (!DRIVER_NAME_RE.test(t)) return 'Enter a valid driver name.';
+  return null;
+};
+
+const validateContact = (v) => {
+  const t = (v || '').trim();
+  if (!t) return null;
+  if (!CONTACT_RE.test(t)) return 'Enter a valid contact number in the format +91 XXXXXXXXXX.';
+  return null;
+};
+
+const validateLicense = (v) => {
+  const t = (v || '').trim().toUpperCase();
+  if (!t) return 'License number is required.';
+  if (!LICENSE_RE.test(t)) return 'Enter a valid driving license number.';
+  return null;
+};
+
+const validateVehicleId = (v) => {
+  const t = (v || '').trim();
+  if (!t) return 'Vehicle ID is required.';
+  if (!VEHICLE_ID_RE.test(t)) return 'Vehicle ID must contain only letters, numbers, and hyphens.';
+  return null;
+};
+
+const validateVehicleName = (v) => {
+  const t = (v || '').trim();
+  if (!t) return 'Enter a valid vehicle name or model.';
+  if (!HAS_ALNUM.test(t)) return 'Enter a valid vehicle name or model.';
+  if (!VEHICLE_NAME_RE.test(t)) return 'Enter a valid vehicle name or model.';
+  return null;
+};
+
+const validateRegistration = (v) => {
+  const t = (v || '').trim().toUpperCase();
+  if (!t) return 'Vehicle registration number is required.';
+  if (!REG_RE.test(t)) return 'Enter a valid vehicle registration number.';
+  return null;
+};
+
+const validateBusPassId = (v) => {
+  const t = (v || '').trim();
+  if (!t) return 'Pass ID is required.';
+  if (!PASS_ID_RE.test(t)) return 'Enter a valid Bus ID in the format BP-1001.';
+  return null;
+};
+
+const validateValidTill = (v) => {
+  if (!v) return 'Valid Till Date is required.';
+  const selected = new Date(v + 'T00:00:00');
+  const today    = new Date(); today.setHours(0,0,0,0);
+  if (selected < today) return 'Valid Till Date cannot be in the past.';
+  return null;
+};
 
 // ==========================================
 // DRIVERS CONTROLLERS
@@ -36,9 +116,19 @@ exports.createDriver = async (req, res) => {
   try {
     let { driverId, name, phone, licenseNumber, status } = req.body;
 
-    if (!name || !name.trim()) {
-      return res.status(400).json({ message: 'Driver name is required' });
-    }
+    const nameErr = validateDriverName(name);
+    if (nameErr) return res.status(400).json({ message: nameErr });
+
+    const contactErr = validateContact(phone);
+    if (contactErr) return res.status(400).json({ message: contactErr });
+
+    const licenseErr = validateLicense(licenseNumber);
+    if (licenseErr) return res.status(400).json({ message: licenseErr });
+
+    // D12: duplicate license check (case-insensitive)
+    const normalizedLicense = (licenseNumber || '').trim().toUpperCase();
+    const dupLicense = await Driver.findOne({ licenseNumber: normalizedLicense });
+    if (dupLicense) return res.status(400).json({ message: 'License number already exists.' });
 
     if (!driverId) {
       const latestDriver = await Driver.findOne().sort({ driverId: -1 });
@@ -57,7 +147,7 @@ exports.createDriver = async (req, res) => {
       driverId,
       name: name.trim(),
       phone: (phone || '').trim(),
-      licenseNumber: (licenseNumber || '').trim(),
+      licenseNumber: normalizedLicense,
       status: status || 'ACTIVE',
     });
 
@@ -98,8 +188,24 @@ exports.updateDriver = async (req, res) => {
       $or: [{ _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }, { driverId: isNaN(id) ? null : Number(id) }],
     });
 
-    if (!driver) {
-      return res.status(404).json({ message: 'Driver not found' });
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
+
+    // Validate updated fields
+    if (name !== undefined) {
+      const nameErr = validateDriverName(name);
+      if (nameErr) return res.status(400).json({ message: nameErr });
+    }
+    if (phone !== undefined) {
+      const contactErr = validateContact(phone);
+      if (contactErr) return res.status(400).json({ message: contactErr });
+    }
+    if (licenseNumber !== undefined) {
+      const licenseErr = validateLicense(licenseNumber);
+      if (licenseErr) return res.status(400).json({ message: licenseErr });
+      // D12: duplicate check — exclude current driver
+      const normalizedLic = licenseNumber.trim().toUpperCase();
+      const dupLic = await Driver.findOne({ licenseNumber: normalizedLic, _id: { $ne: driver._id } });
+      if (dupLic) return res.status(400).json({ message: 'License number already exists.' });
     }
 
     if (driverId !== undefined) {
@@ -115,7 +221,7 @@ exports.updateDriver = async (req, res) => {
 
     if (name !== undefined) driver.name = name.trim();
     if (phone !== undefined) driver.phone = (phone || '').trim();
-    if (licenseNumber !== undefined) driver.licenseNumber = (licenseNumber || '').trim();
+    if (licenseNumber !== undefined) driver.licenseNumber = licenseNumber.trim().toUpperCase();
     if (status !== undefined) driver.status = status;
 
     await driver.save();
@@ -184,23 +290,29 @@ exports.createVehicle = async (req, res) => {
   try {
     const { vehicleId, name, vehicleNumber, capacity, status } = req.body;
 
-    if (!vehicleId || !vehicleId.toString().trim()) {
-      return res.status(400).json({ message: 'Vehicle ID is required' });
-    }
-    if (!name || !name.trim()) {
-      return res.status(400).json({ message: 'Vehicle name is required' });
-    }
+    const idErr = validateVehicleId(vehicleId);
+    if (idErr) return res.status(400).json({ message: idErr });
+
+    const nameErr = validateVehicleName(name);
+    if (nameErr) return res.status(400).json({ message: nameErr });
+
+    // Imp-23 + D17: registration mandatory and valid
+    const regErr = validateRegistration(vehicleNumber);
+    if (regErr) return res.status(400).json({ message: regErr });
 
     const cleanVehicleId = vehicleId.toString().trim();
     const existing = await Vehicle.findOne({ vehicleId: cleanVehicleId });
-    if (existing) {
-      return res.status(400).json({ message: `Vehicle ID '${cleanVehicleId}' already exists.` });
-    }
+    if (existing) return res.status(400).json({ message: `Vehicle ID '${cleanVehicleId}' already exists.` });
+
+    // D15: duplicate registration check
+    const normalizedReg = vehicleNumber.trim().toUpperCase();
+    const dupReg = await Vehicle.findOne({ vehicleNumber: normalizedReg });
+    if (dupReg) return res.status(400).json({ message: 'Vehicle registration number already exists.' });
 
     const newVehicle = new Vehicle({
       vehicleId: cleanVehicleId,
       name: name.trim(),
-      vehicleNumber: (vehicleNumber || '').trim(),
+      vehicleNumber: normalizedReg,
       capacity: capacity ? Number(capacity) : 40,
       status: status || 'ACTIVE',
     });
@@ -223,8 +335,22 @@ exports.updateVehicle = async (req, res) => {
       $or: [{ _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }, { vehicleId: id }],
     });
 
-    if (!vehicle) {
-      return res.status(404).json({ message: 'Vehicle not found' });
+    if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
+
+    // Validate updated fields
+    if (name !== undefined) {
+      const nameErr = validateVehicleName(name);
+      if (nameErr) return res.status(400).json({ message: nameErr });
+    }
+    if (vehicleNumber !== undefined) {
+      const regErr = validateRegistration(vehicleNumber);
+      if (regErr) return res.status(400).json({ message: regErr });
+      // D15: duplicate reg — exclude self
+      const normalizedReg = vehicleNumber.trim().toUpperCase();
+      if (normalizedReg !== vehicle.vehicleNumber) {
+        const dupReg = await Vehicle.findOne({ vehicleNumber: normalizedReg, _id: { $ne: vehicle._id } });
+        if (dupReg) return res.status(400).json({ message: 'Vehicle registration number already exists.' });
+      }
     }
 
     if (vehicleId !== undefined) {
@@ -239,7 +365,7 @@ exports.updateVehicle = async (req, res) => {
     }
 
     if (name !== undefined) vehicle.name = name.trim();
-    if (vehicleNumber !== undefined) vehicle.vehicleNumber = (vehicleNumber || '').trim();
+    if (vehicleNumber !== undefined) vehicle.vehicleNumber = vehicleNumber.trim().toUpperCase();
     if (capacity !== undefined) vehicle.capacity = Number(capacity) || 40;
     if (status !== undefined) vehicle.status = status;
 
@@ -346,6 +472,12 @@ exports.createRoute = async (req, res) => {
     routeId = Number(routeId);
     if (isNaN(routeId)) {
       return res.status(400).json({ message: 'Route ID must be a valid number' });
+    }
+
+    // D2: validate custom route name on backend
+    if (hasCustomName && routeName) {
+      const nameErr = validateRouteName(routeName);
+      if (nameErr) return res.status(400).json({ message: nameErr });
     }
 
     if (!driverName || !driverName.trim()) {
@@ -566,6 +698,11 @@ exports.createPass = async (req, res) => {
     if (!passId || !passId.toString().trim()) {
       return res.status(400).json({ message: 'Pass ID is required' });
     }
+
+    // D18/D19: Bus Pass ID format
+    const passIdErr = validateBusPassId(passId);
+    if (passIdErr) return res.status(400).json({ message: passIdErr });
+
     if (!studentId || !studentId.toString().trim()) {
       return res.status(400).json({ message: 'Student ID / PRN is required' });
     }
@@ -578,6 +715,10 @@ exports.createPass = async (req, res) => {
     if (!validTill) {
       return res.status(400).json({ message: 'Valid Till date is required' });
     }
+
+    // D20: reject past dates
+    const dateErr = validateValidTill(validTill);
+    if (dateErr) return res.status(400).json({ message: dateErr });
 
     const cleanPassId = passId.toString().trim();
     const existing = await BusPass.findOne({ passId: cleanPassId });
@@ -669,7 +810,11 @@ exports.updatePass = async (req, res) => {
     if (fromStop !== undefined) pass.fromStop = fromStop.trim();
     if (toStop !== undefined) pass.toStop = toStop.trim();
     if (paymentStatus !== undefined) pass.paymentStatus = paymentStatus;
-    if (validTill !== undefined) pass.validTill = new Date(validTill);
+    if (validTill !== undefined) {
+      const dateErr = validateValidTill(validTill);
+      if (dateErr) return res.status(400).json({ message: dateErr });
+      pass.validTill = new Date(validTill);
+    }
 
     await pass.save();
     res.json({ message: 'Bus pass updated successfully!', pass });

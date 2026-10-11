@@ -1,3 +1,12 @@
+/**
+ * Vehicle.js
+ *
+ * Changes:
+ *   Imp-23  vehicleNumber (registration) is now required
+ *   D15     sparse unique index on vehicleNumber for duplicate prevention
+ *           sparse: true is safe for any existing records without a plate number
+ */
+
 const mongoose = require('mongoose');
 
 const vehicleSchema = new mongoose.Schema(
@@ -17,7 +26,11 @@ const vehicleSchema = new mongoose.Schema(
     vehicleNumber: {
       type: String,
       trim: true,
+      uppercase: true,
       default: '',
+      // sparse unique: existing vehicles without a plate coexist safely;
+      // new vehicles are validated as non-empty by the controller.
+      index: { unique: true, sparse: true },
     },
     capacity: {
       type: Number,
@@ -29,9 +42,7 @@ const vehicleSchema = new mongoose.Schema(
       default: 'ACTIVE',
     },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
 module.exports = mongoose.model('Vehicle', vehicleSchema);

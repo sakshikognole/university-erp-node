@@ -40,6 +40,82 @@ const generateEventId = async () => {
   return `${prefix}${year}${sequence.toString().padStart(4, '0')}`;
 };
 
+// ── Shared backend validation helpers ────────────────────────────────────────
+const TITLE_HAS_LETTER = /[A-Za-z]/;
+const DURATION_RE = /^\d{1,2}:\d{2}$/;
+const DIGITS_ONLY = /^\d+$/;
+const URL_PROTOCOLS = /^https?:\/\//i;
+
+/**
+ * Validate the fields shared by create and update.
+ * Returns an array of error strings (empty = valid).
+ */
+const validateEventFields = ({ title, description, eventDate, eventTime, venue, organizer, imageUrl, duration }) => {
+  const errors = [];
+
+  // Title: required, must contain at least one letter
+  const titleTrimmed = (title || '').trim();
+  if (!titleTrimmed) {
+    errors.push('Event Title is required.');
+  } else if (titleTrimmed.length < 3) {
+    errors.push('Event Title must be at least 3 characters.');
+  } else if (!TITLE_HAS_LETTER.test(titleTrimmed)) {
+    errors.push('Event Title must contain at least one letter (e.g. 2026 Tech Fest).');
+  }
+
+  if (!(description || '').trim()) errors.push('Description is required.');
+  if (!eventDate) errors.push('Event Date is required.');
+  if (!eventTime) errors.push('Event Time is required.');
+  if (!venue) errors.push('Venue is required.');
+
+  // Organizer name: required, must contain at least one letter
+  const parsedOrg = organizer && typeof organizer === 'object'
+    ? organizer
+    : (() => { try { return JSON.parse(organizer || '{}'); } catch { return { name: organizer || '' }; } })();
+  const orgName = (parsedOrg.name || '').trim();
+  if (!orgName) {
+    errors.push('Organizer Name is required.');
+  } else if (!TITLE_HAS_LETTER.test(orgName)) {
+    errors.push('Please enter a valid organizer name.');
+  }
+
+  // Image URL: optional; when supplied must be http/https
+  const imgUrl = (imageUrl || '').trim();
+  if (imgUrl && !URL_PROTOCOLS.test(imgUrl)) {
+    errors.push('Please enter a valid URL for the image.');
+  }
+
+  // Duration: optional; when supplied must be HH:MM with valid minutes
+  const dur = (duration || '').trim();
+  if (dur) {
+    if (!DURATION_RE.test(dur)) {
+      errors.push('Duration must be in HH:MM format (e.g. 02:30).');
+    } else {
+      const mm = parseInt(dur.split(':')[1], 10);
+      const hh = parseInt(dur.split(':')[0], 10);
+      if (mm > 59) errors.push('Duration minutes must be between 00 and 59.');
+      if (hh === 0 && mm === 0) errors.push('Duration cannot be 00:00.');
+    }
+  }
+
+  // Organizer contact: optional; when supplied strip country-code prefix and
+  // require exactly 10 local digits
+  const contact = (parsedOrg.contact || '').trim();
+  if (contact) {
+    if (/\+\d+\+/.test(contact)) {
+      errors.push('Please enter the country code once, followed by your 10-digit number.');
+    } else {
+      const stripped = contact.replace(/^\+\d{1,3}\s*/, '').replace(/\s/g, '');
+      if (!DIGITS_ONLY.test(stripped) || stripped.length !== 10) {
+        errors.push('Please enter a valid 10-digit phone number (e.g. +91 1234567890).');
+      }
+    }
+  }
+
+  return errors;
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Create Event Notice
 exports.createEventNotice = async (req, res) => {
   try {
@@ -60,10 +136,13 @@ exports.createEventNotice = async (req, res) => {
       status,
     } = req.body;
 
-    if (!title || !description || !eventDate || !eventTime || !venue) {
-      return res.status(400).json({
-        message: 'Title, Description, Event Date, Event Time, and Venue are required.',
-      });
+    // Run shared validation
+    const validationErrors = validateEventFields({
+      title, description, eventDate, eventTime, venue, organizer,
+      imageUrl: req.body.imageUrl, duration,
+    });
+    if (validationErrors.length > 0) {
+      return res.status(400).json({ message: validationErrors[0], errors: validationErrors });
     }
 
     // Validate venue exists
@@ -287,6 +366,24 @@ exports.updateEventNotice = async (req, res) => {
       return res.status(404).json({ message: 'Event notice not found' });
     }
 
+    // Run shared field validation on the incoming data
+    // Merge with existing doc so required fields already stored aren't
+    // accidentally triggered as missing when not re-sent by the client.
+    const mergedForValidation = {
+      title: updateData.title !== undefined ? updateData.title : eventNotice.title,
+      description: updateData.description !== undefined ? updateData.description : eventNotice.description,
+      eventDate: updateData.eventDate !== undefined ? updateData.eventDate : eventNotice.eventDate,
+      eventTime: updateData.eventTime !== undefined ? updateData.eventTime : eventNotice.eventTime,
+      venue: updateData.venue !== undefined ? updateData.venue : eventNotice.venue?.toString(),
+      organizer: updateData.organizer !== undefined ? updateData.organizer : eventNotice.organizer,
+      imageUrl: updateData.imageUrl !== undefined ? updateData.imageUrl : eventNotice.imageUrl,
+      duration: updateData.duration !== undefined ? updateData.duration : eventNotice.duration,
+    };
+    const validationErrors = validateEventFields(mergedForValidation);
+    if (validationErrors.length > 0) {
+      return res.status(400).json({ message: validationErrors[0], errors: validationErrors });
+    }
+
     // If venue is being updated, validate it exists
     if (updateData.venue) {
       if (!mongoose.Types.ObjectId.isValid(updateData.venue)) {
@@ -299,20 +396,24 @@ exports.updateEventNotice = async (req, res) => {
     }
 
     // Handle image URL update — browser uploads directly to Cloudinary and sends
-    // back the URL.  Delete old Cloudinary asset if the URL changed.
+    // back the URL.  Only touch imageUrl when the client explicitly provides it.
+    // If req.body.imageUrl is undefined (key absent), preserve the existing URL.
     if (req.body.imageUrl !== undefined) {
-      const newImageUrl = req.body.imageUrl.trim() || null;
-      if (newImageUrl !== eventNotice.imageUrl) {
-        if (eventNotice.imageUrl && eventNotice.imageUrl.includes('cloudinary')) {
-          const publicId = eventNotice.imageUrl.split('/').pop().split('.')[0];
-          try {
-            await cloudinary.uploader.destroy(`event-notices/${publicId}`);
-          } catch (err) {
-            console.warn('Cloudinary old image delete notice:', err.message);
-          }
+      const newImageUrl = (req.body.imageUrl || '').trim() || null;
+      // Only delete the old Cloudinary asset when the URL genuinely changes
+      if (newImageUrl !== eventNotice.imageUrl && eventNotice.imageUrl && eventNotice.imageUrl.includes('cloudinary')) {
+        const publicId = eventNotice.imageUrl.split('/').pop().split('.')[0];
+        try {
+          await cloudinary.uploader.destroy(`event-notices/${publicId}`);
+        } catch (err) {
+          console.warn('Cloudinary old image delete notice:', err.message);
         }
       }
       updateData.imageUrl = newImageUrl;
+    } else {
+      // Key was not sent — remove it from updateData so findByIdAndUpdate
+      // doesn't accidentally unset the field.
+      delete updateData.imageUrl;
     }
 
     // Safely parse JSON strings if they exist

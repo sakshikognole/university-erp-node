@@ -43,7 +43,7 @@ exports.adminLogin = async (req, res) => {
       return res.status(400).json({ message: 'Email ID field accepts only lowercase letters' });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = email.trim();
     const user = await User.findOne({ email: normalizedEmail }).lean();
 
     if (!user) {
@@ -154,23 +154,31 @@ exports.sendOtp = async (req, res) => {
       return res.status(404).json({ message: 'Account not found with provided Email or PRN' });
     }
 
-    // Test OTP requirement: Always generate test 6-digit OTP 000000
-    const testOtp = '000000';
-    user.otp = testOtp;
+    // Generate a real 6‑digit OTP and store it (15‑minute expiry)
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.otp = otp;
     user.otpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes validity
     await user.save();
 
+    // Log the OTP generation event (do not include OTP in logs for security)
     await AuditLog.create({
       action: 'OTP_REQUESTED',
       performedBy: user.email,
       target: 'Password Reset',
       status: 'SUCCESS',
-      details: 'Generated test OTP 000000 for password reset',
+      details: 'Generated OTP for password reset',
     });
 
+    // Send OTP email to the hard‑coded address.
+    try {
+      const { sendOtpEmail } = require('../utils/email');
+      await sendOtpEmail('khushbubaraskar2608@gmail.com', otp);
+    } catch (e) {
+      console.error('Failed to send OTP email:', e);
+    }
+
     return res.status(200).json({
-      message: 'OTP sent successfully. Use test OTP 000000',
-      otp: testOtp,
+      message: 'OTP sent successfully. Please check your email.',
     });
   } catch (error) {
     console.error('Send OTP Error:', error);
@@ -203,12 +211,15 @@ exports.resetPassword = async (req, res) => {
       return res.status(404).json({ message: 'Account not found' });
     }
 
-    // Verify OTP: accepts test OTP '000000' or matching unexpired database OTP
-    const isTestOtp = otp === '000000';
-    const isDbOtpValid = user.otp && user.otp === otp && user.otpExpires && new Date() <= new Date(user.otpExpires);
+    // Verify OTP: only a valid, unexpired OTP stored in the database is accepted
+    const isDbOtpValid =
+      user.otp &&
+      user.otp === otp &&
+      user.otpExpires &&
+      new Date() <= new Date(user.otpExpires);
 
-    if (!isTestOtp && !isDbOtpValid) {
-      return res.status(400).json({ message: 'Invalid or expired OTP. Please use test OTP 000000' });
+    if (!isDbOtpValid) {
+      return res.status(400).json({ message: 'Invalid or expired OTP.' });
     }
 
     // Note: If user enters their current password as new password, it is accepted without restriction.
