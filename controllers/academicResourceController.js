@@ -1,74 +1,48 @@
 const AcademicResource = require('../models/AcademicResource');
-const cloudinary = require('../config/cloudinary');
-const streamifier = require('streamifier');
+const path = require('path');
+const fs = require('fs');
 
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, '..', 'uploads', 'academic-resources');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
-// Upload academic resource
+// Upload academic resource — saves to local disk
 const uploadAcademicResource = async (req, res) => {
   try {
     const { title, subject } = req.body;
 
-    // Validate fields
     if (!title || !subject) {
-      return res.status(400).json({
-        message: 'Title and subject are required'
-      });
+      return res.status(400).json({ message: 'Title and subject are required' });
     }
-
-    // Validate file
     if (!req.file) {
-      return res.status(400).json({
-        message: 'Please upload a file'
-      });
+      return res.status(400).json({ message: 'Please upload a file' });
     }
 
-    // Upload file to Cloudinary
-    const uploadResult = await new Promise((resolve, reject) => {
+    // Save file to disk
+    const fileName = `${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`;
+    const filePath = path.join(uploadsDir, fileName);
+    fs.writeFileSync(filePath, req.file.buffer);
 
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: 'academic-resources',
-          resource_type: 'raw'
-        },
+    // Build a URL the frontend can use to open the file
+    const isProduction = process.env.NODE_ENV === 'production';
+    const baseUrl = isProduction
+      ? (process.env.BACKEND_NODE_URL || 'https://university-erp-node.onrender.com')
+      : 'http://localhost:5000';
+    const fileUrl = `${baseUrl}/uploads/academic-resources/${fileName}`;
 
-        (error, result) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve(result);
-          }
-        }
-      );
-
-      streamifier
-        .createReadStream(req.file.buffer)
-        .pipe(uploadStream);
-    });
-
-    // Save Cloudinary information in MongoDB
     const resource = await AcademicResource.create({
       title,
       subject,
-      fileUrl: uploadResult.secure_url,
-      publicId: uploadResult.public_id
+      fileUrl,
+      publicId: fileName,
     });
 
-    res.status(201).json({
-      message: 'Academic resource uploaded successfully',
-      resource
-    });
-
+    res.status(201).json({ message: 'Academic resource uploaded successfully', resource });
   } catch (error) {
-
-    console.error(
-      'Upload academic resource error:',
-      error
-    );
-
-    res.status(500).json({
-      message: 'Failed to upload academic resource',
-      error: error.message
-    });
+    console.error('Upload academic resource error:', error);
+    res.status(500).json({ message: 'Failed to upload academic resource', error: error.message });
   }
 };
 
@@ -131,43 +105,23 @@ const getAcademicResourcesBySubject = async (req, res) => {
 // Delete academic resource
 const deleteAcademicResource = async (req, res) => {
   try {
-
     const { id } = req.params;
-
     const resource = await AcademicResource.findById(id);
-
     if (!resource) {
-      return res.status(404).json({
-        message: 'Academic resource not found'
-      });
+      return res.status(404).json({ message: 'Academic resource not found' });
     }
 
-    // Delete file from Cloudinary
-    await cloudinary.uploader.destroy(
-      resource.publicId,
-      {
-        resource_type: 'raw'
-      }
-    );
+    // Delete file from local disk if it exists
+    const filePath = path.join(uploadsDir, resource.publicId);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
 
-    // Delete record from MongoDB
     await AcademicResource.findByIdAndDelete(id);
-
-    res.status(200).json({
-      message: 'Academic resource deleted successfully'
-    });
-
+    res.status(200).json({ message: 'Academic resource deleted successfully' });
   } catch (error) {
-
-    console.error(
-      'Delete academic resource error:',
-      error
-    );
-
-    res.status(500).json({
-      message: 'Failed to delete academic resource',
-      error: error.message
-    });
+    console.error('Delete academic resource error:', error);
+    res.status(500).json({ message: 'Failed to delete academic resource', error: error.message });
   }
 };
 
