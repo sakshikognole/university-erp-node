@@ -59,7 +59,10 @@ const downloadAcademicResource = async (req, res) => {
     }
 
     if (!resource.fileData) {
-      return res.status(404).json({ message: 'File data not available for this resource' });
+      // Old record uploaded before Base64 fix — tell user to re-upload
+      return res.status(410).json({ 
+        message: 'File not available. This resource was uploaded before the storage update. Please delete it and re-upload the file.' 
+      });
     }
 
     const fileBuffer = Buffer.from(resource.fileData, 'base64');
