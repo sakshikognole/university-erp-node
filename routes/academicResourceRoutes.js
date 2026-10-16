@@ -3,6 +3,7 @@ const multer = require('multer');
 
 const {
   uploadAcademicResource,
+  downloadAcademicResource,
   getAllAcademicResources,
   getAcademicResourcesBySubject,
   deleteAcademicResource
@@ -27,6 +28,9 @@ router.get('/test', (req, res) => {
 
 // Get all academic resources
 router.get('/', getAllAcademicResources);
+
+// Download resource file by ID
+router.get('/download/:id', downloadAcademicResource);
 
 
 // Get resources by subject
