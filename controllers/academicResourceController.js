@@ -1,14 +1,6 @@
 const AcademicResource = require('../models/AcademicResource');
-const path = require('path');
-const fs = require('fs');
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '..', 'uploads', 'academic-resources');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// Upload academic resource — saves to local disk
+// Upload academic resource — stores file as Base64 in MongoDB (works on any host)
 const uploadAcademicResource = async (req, res) => {
   try {
     const { title, subject } = req.body;
@@ -20,101 +12,77 @@ const uploadAcademicResource = async (req, res) => {
       return res.status(400).json({ message: 'Please upload a file' });
     }
 
-    // Save file to disk
-    const fileName = `${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`;
-    const filePath = path.join(uploadsDir, fileName);
-    fs.writeFileSync(filePath, req.file.buffer);
+    // Convert file buffer to Base64
+    const base64Data = req.file.buffer.toString('base64');
+    const mimeType = req.file.mimetype;
 
-    // Build a URL the frontend can use to open the file
-    const isProduction = process.env.NODE_ENV === 'production';
-    const baseUrl = isProduction
-      ? (process.env.BACKEND_NODE_URL || 'https://university-erp-node.onrender.com')
-      : 'http://localhost:5000';
-    const fileUrl = `${baseUrl}/uploads/academic-resources/${fileName}`;
+    // Create a data URL so the frontend can open it directly
+    const fileUrl = `data:${mimeType};base64,${base64Data}`;
 
     const resource = await AcademicResource.create({
       title,
       subject,
       fileUrl,
-      publicId: fileName,
+      publicId: req.file.originalname,
+      fileData: base64Data,
+      mimeType,
     });
 
-    res.status(201).json({ message: 'Academic resource uploaded successfully', resource });
+    // Return without the large base64 data in the response
+    const resourceResponse = {
+      _id: resource._id,
+      title: resource.title,
+      subject: resource.subject,
+      fileUrl: resource.fileUrl,
+      publicId: resource.publicId,
+      mimeType: resource.mimeType,
+      createdAt: resource.createdAt,
+    };
+
+    res.status(201).json({ message: 'Academic resource uploaded successfully', resource: resourceResponse });
   } catch (error) {
     console.error('Upload academic resource error:', error);
     res.status(500).json({ message: 'Failed to upload academic resource', error: error.message });
   }
 };
 
-
 // Get all academic resources
 const getAllAcademicResources = async (req, res) => {
   try {
-
     const resources = await AcademicResource.find()
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .select('-fileData'); // Exclude large base64 from list — fileUrl already has it
 
-    res.status(200).json({
-      resources
-    });
-
+    res.status(200).json({ resources });
   } catch (error) {
-
-    console.error(
-      'Get academic resources error:',
-      error
-    );
-
-    res.status(500).json({
-      message: 'Failed to fetch academic resources',
-      error: error.message
-    });
+    console.error('Get academic resources error:', error);
+    res.status(500).json({ message: 'Failed to fetch academic resources', error: error.message });
   }
 };
-
 
 // Get resources by subject
 const getAcademicResourcesBySubject = async (req, res) => {
   try {
-
     const { subject } = req.params;
+    const resources = await AcademicResource.find({ subject })
+      .sort({ createdAt: -1 })
+      .select('-fileData');
 
-    const resources = await AcademicResource.find({
-      subject
-    }).sort({ createdAt: -1 });
-
-    res.status(200).json({
-      resources
-    });
-
+    res.status(200).json({ resources });
   } catch (error) {
-
-    console.error(
-      'Get resources by subject error:',
-      error
-    );
-
-    res.status(500).json({
-      message: 'Failed to fetch resources',
-      error: error.message
-    });
+    console.error('Get resources by subject error:', error);
+    res.status(500).json({ message: 'Failed to fetch resources', error: error.message });
   }
 };
-
 
 // Delete academic resource
 const deleteAcademicResource = async (req, res) => {
   try {
     const { id } = req.params;
     const resource = await AcademicResource.findById(id);
+
     if (!resource) {
       return res.status(404).json({ message: 'Academic resource not found' });
-    }
-
-    // Delete file from local disk if it exists
-    const filePath = path.join(uploadsDir, resource.publicId);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
     }
 
     await AcademicResource.findByIdAndDelete(id);
@@ -124,7 +92,6 @@ const deleteAcademicResource = async (req, res) => {
     res.status(500).json({ message: 'Failed to delete academic resource', error: error.message });
   }
 };
-
 
 module.exports = {
   uploadAcademicResource,

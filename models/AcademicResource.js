@@ -22,6 +22,16 @@ const academicResourceSchema = new mongoose.Schema(
     publicId: {
       type: String,
       required: true
+    },
+
+    fileData: {
+      type: String, // Base64 encoded file content
+      default: null
+    },
+
+    mimeType: {
+      type: String,
+      default: null
     }
   },
   {
