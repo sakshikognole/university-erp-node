@@ -82,7 +82,7 @@ exports.getStudentById = async (req, res) => {
 // ---------------------------------------------------------------------------
 exports.createStudent = async (req, res) => {
   try {
-    const { name, prn, class: studentClass, division, degree, yearOfEnrollment, customFields } = req.body;
+    const { name, prn, class: studentClass, division, degree, yearOfEnrollment, email, customFields } = req.body;
 
     // ── Field-level validation (DEF-001 to DEF-009, Section 5 Division) ──
     const { errors, isValid } = validateStudentFields({
@@ -92,6 +92,7 @@ exports.createStudent = async (req, res) => {
       division,
       degree,
       yearOfEnrollment,
+      email,
     });
 
     if (!isValid) {
@@ -114,6 +115,7 @@ exports.createStudent = async (req, res) => {
       division: division.trim(),
       degree: degree.trim(),
       yearOfEnrollment: yearOfEnrollment.trim(),
+      email: email ? email.trim().toLowerCase() : '',
       customFields: customFields || [],
     });
 
@@ -141,7 +143,7 @@ exports.createStudent = async (req, res) => {
 exports.updateStudent = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, prn, class: studentClass, division, degree, yearOfEnrollment, customFields } = req.body;
+    const { name, prn, class: studentClass, division, degree, yearOfEnrollment, email, customFields } = req.body;
 
     // ── Field-level validation (DEF-010 to DEF-014, Section 5 Division) ──
     const { errors, isValid } = validateStudentFields({
@@ -151,6 +153,7 @@ exports.updateStudent = async (req, res) => {
       division,
       degree,
       yearOfEnrollment,
+      email,
     });
 
     if (!isValid) {
@@ -187,6 +190,7 @@ exports.updateStudent = async (req, res) => {
     student.division        = division.trim();
     student.degree          = degree.trim();
     student.yearOfEnrollment = yearOfEnrollment.trim();
+    student.email           = email ? email.trim().toLowerCase() : '';
     if (Array.isArray(customFields)) {
       student.customFields = customFields;
     }

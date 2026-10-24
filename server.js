@@ -1,5 +1,8 @@
-require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+// Load .env from parent directory when running locally.
+// In Docker, env vars are already injected by docker-compose — dotenv is a no-op there.
+// The `override: false` ensures Docker-injected vars are never overwritten.
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env'), override: false });
 
 const dns = require('dns');
 try {
@@ -23,23 +26,14 @@ const alumniRoutes = require('./routes/alumniRoutes');
 const alumniJobRoutes = require('./routes/alumniJobRoutes');
 const systemAnnouncementRoutes = require('./routes/systemAnnouncementRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
-const announcementRoutes = require('./routes/announcementRoutes');
-const submissionRoutes = require('./routes/submissionRoutes');
-const academicResourceRoutes = require('./routes/academicResourceRoutes');
+const emailCommunicationRoutes = require('./routes/emailCommunicationRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+app.use(cors());
 app.use(express.json());
-
-// Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 app.get('/', (req, res) => {
@@ -59,9 +53,7 @@ app.use('/api/alumni', alumniRoutes);
 app.use('/api/alumni-jobs', alumniJobRoutes);
 app.use('/api/system-announcements', systemAnnouncementRoutes);
 app.use('/api/attendance', attendanceRoutes);
-app.use('/api/announcements', announcementRoutes);
-app.use('/api/submissions', submissionRoutes);
-app.use('/api/resources', academicResourceRoutes);
+app.use('/api/email-communication', emailCommunicationRoutes);
 
 // Fallback for non-API web routes (redirect browser navigation to frontend)
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';

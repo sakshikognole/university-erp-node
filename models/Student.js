@@ -34,6 +34,12 @@ const studentSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    email: {
+      type: String,
+      default: '',
+      trim: true,
+      lowercase: true,
+    },
     customFields: {
       type: [
         {
