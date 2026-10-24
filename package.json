@@ -13,9 +13,12 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "cloudinary": "^1.41.3",
+    "cloudinary": "^2.7.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
@@ -25,5 +28,8 @@
     "multer-storage-cloudinary": "^4.0.0",
     "razorpay": "^2.9.8",
     "@sendgrid/mail": "^8.1.6"
+  },
+  "overrides": {
+    "cloudinary": "^2.7.0"
   }
 }
