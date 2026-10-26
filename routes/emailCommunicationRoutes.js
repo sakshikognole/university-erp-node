@@ -4,8 +4,8 @@
  * Mounts at: /api/email-communication
  *
  * All routes require:
- *  1. verifyToken  — valid Bearer JWT
- *  2. authorizeRole — SUPER_ADMIN or SUB_ADMIN
+ *  1. verifyToken  ΓÇö valid Bearer JWT
+ *  2. authorizeRole ΓÇö SUPER_ADMIN or SUB_ADMIN
  *     (SUPER_ADMIN always passes through authorizeRole regardless of listed roles)
  */
 

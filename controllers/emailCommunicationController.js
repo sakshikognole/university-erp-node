@@ -81,7 +81,7 @@ exports.sendEmail = async (req, res) => {
   try {
     const { recipients, subject, body } = req.body;
 
-    // ── Input validation ──────────────────────────────────────────────────
+    // ΓöÇΓöÇ Input validation ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
     // recipients
     if (!Array.isArray(recipients) || recipients.length === 0) {
@@ -118,7 +118,7 @@ exports.sendEmail = async (req, res) => {
       });
     }
 
-    // ── Normalise and deduplicate recipients (backend re-validation) ──────
+    // ΓöÇΓöÇ Normalise and deduplicate recipients (backend re-validation) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const seen = new Set();
     const validRecipients = [];
     const invalidRecipients = [];
@@ -137,7 +137,7 @@ exports.sendEmail = async (req, res) => {
       }
 
       if (seen.has(email)) {
-        // silently deduplicate — duplicates from frontend confirmation dialog
+        // silently deduplicate ΓÇö duplicates from frontend confirmation dialog
         continue;
       }
 
@@ -152,10 +152,10 @@ exports.sendEmail = async (req, res) => {
       });
     }
 
-    // ── Deliver ───────────────────────────────────────────────────────────
+    // ΓöÇΓöÇ Deliver ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const { sent, failed } = await sendInBatches(validRecipients, trimmedSubject, trimmedBody);
 
-    // ── Response ──────────────────────────────────────────────────────────
+    // ΓöÇΓöÇ Response ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const totalRequested = validRecipients.length;
     const sentCount = sent.length;
     const failedCount = failed.length;
@@ -165,7 +165,7 @@ exports.sendEmail = async (req, res) => {
       return res.status(502).json({
         message: 'Email delivery failed. No messages were sent.',
         summary: { totalRequested, sent: sentCount, failed: failedCount },
-        // Return generic failure info — do not leak internal details
+        // Return generic failure info ΓÇö do not leak internal details
         failedRecipients: failed.map((f) => ({ email: f.email, reason: 'Delivery failed' })),
       });
     }

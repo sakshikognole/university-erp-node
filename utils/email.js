@@ -3,24 +3,24 @@ const sgMail = require('@sendgrid/mail');
 // Expect SENDGRID_API_KEY in environment variables
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 if (!SENDGRID_API_KEY) {
-  console.warn('SENDGRID_API_KEY not set – email sending will fail.');
+  console.warn('SENDGRID_API_KEY not set ΓÇô email sending will fail.');
 }
 sgMail.setApiKey(SENDGRID_API_KEY);
 
 // The verified sender identity used across all outbound emails.
-// Must be verified in SendGrid — do not change without updating the SendGrid account.
+// Must be verified in SendGrid ΓÇö do not change without updating the SendGrid account.
 const SENDER_EMAIL = 'khushbubaraskar2608@gmail.com';
 
 /**
  * Sends a simple OTP email.
  * @param {string} to   Destination email address.
- * @param {string} otp  Six‑digit OTP string.
+ * @param {string} otp  SixΓÇædigit OTP string.
  */
 async function sendOtpEmail(to, otp) {
   const msg = {
     to,
     from: SENDER_EMAIL, // must be a verified sender in SendGrid
-    subject: 'Your One‑Time Password (OTP)',
+    subject: 'Your OneΓÇæTime Password (OTP)',
     text: `Your OTP is ${otp}. It is valid for 15 minutes.`,
   };
   try {
@@ -46,7 +46,7 @@ async function sendCustomEmail(to, subject, textBody) {
     throw new Error('SENDGRID_API_KEY is not configured. Email delivery is unavailable.');
   }
 
-  // Build a simple HTML version — escape user content so it cannot inject markup.
+  // Build a simple HTML version ΓÇö escape user content so it cannot inject markup.
   const escapeHtml = (str) =>
     str
       .replace(/&/g, '&amp;')

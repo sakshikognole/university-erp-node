@@ -1,8 +1,5 @@
-// Load .env from parent directory when running locally.
-// In Docker, env vars are already injected by docker-compose — dotenv is a no-op there.
-// The `override: false` ensures Docker-injected vars are never overwritten.
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '../.env'), override: false });
 
 const dns = require('dns');
 try {
@@ -35,7 +32,11 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(express.json());
 
 // Serve uploaded files statically
