@@ -31,6 +31,8 @@
     "streamifier": "^0.1.1"
   },
   "overrides": {
-    "cloudinary": "^2.7.0"
+    "cloudinary": "^2.7.0",
+    "follow-redirects": "^1.16.2",
+    "deepmerge": "4.1.2"
   }
 }
