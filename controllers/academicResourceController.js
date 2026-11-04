@@ -60,13 +60,27 @@ const downloadAcademicResource = async (req, res) => {
 
     if (!resource.fileData) {
       // Old record uploaded before Base64 fix — tell user to re-upload
-      return res.status(410).json({ 
-        message: 'File not available. This resource was uploaded before the storage update. Please delete it and re-upload the file.' 
+      return res.status(410).json({
+        message: 'File not available. This resource was uploaded before the storage update. Please delete it and re-upload the file.'
       });
     }
 
     const fileBuffer = Buffer.from(resource.fileData, 'base64');
-    const mimeType = resource.mimeType || 'application/octet-stream';
+
+    const extension = (resource.publicId || '').split('.').pop().toLowerCase();
+
+    const mimeTypes = {
+      pdf: 'application/pdf',
+      doc: 'application/msword',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      ppt: 'application/vnd.ms-powerpoint',
+      pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    };
+
+    const mimeType =
+      !resource.mimeType || resource.mimeType === 'application/octet-stream'
+        ? (mimeTypes[extension] || 'application/octet-stream')
+        : resource.mimeType;
     const fileName = resource.publicId || 'resource';
 
     res.setHeader('Content-Type', mimeType);
@@ -90,10 +104,10 @@ const getAllAcademicResources = async (req, res) => {
     const fixed = resources.map(r => {
       const obj = r.toObject();
       if (!obj.fileUrl || obj.fileUrl === 'pending' ||
-          obj.fileUrl.includes('localhost') ||
-          obj.fileUrl.includes('127.0.0.1') ||
-          obj.fileUrl.startsWith('data:') ||
-          !obj.fileUrl.startsWith('/api')) {
+        obj.fileUrl.includes('localhost') ||
+        obj.fileUrl.includes('127.0.0.1') ||
+        obj.fileUrl.startsWith('data:') ||
+        !obj.fileUrl.startsWith('/api')) {
         obj.fileUrl = `/api/resources/download/${obj._id}`;
       }
       return obj;
