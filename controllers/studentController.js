@@ -114,6 +114,8 @@ exports.createStudent = async (req, res) => {
       division: division.trim(),
       degree: degree.trim(),
       yearOfEnrollment: yearOfEnrollment.trim(),
+      email: (req.body.email || '').trim().toLowerCase(),
+      gender: (req.body.gender || '').trim(),
       customFields: customFields || [],
     });
 
@@ -187,6 +189,8 @@ exports.updateStudent = async (req, res) => {
     student.division        = division.trim();
     student.degree          = degree.trim();
     student.yearOfEnrollment = yearOfEnrollment.trim();
+    student.email           = (req.body.email || '').trim().toLowerCase();
+    student.gender          = (req.body.gender || '').trim();
     if (Array.isArray(customFields)) {
       student.customFields = customFields;
     }

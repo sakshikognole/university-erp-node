@@ -1,12 +1,19 @@
-require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
-const path = require('path');
-
+// ── DNS override MUST be first — before dotenv/mongoose load ────────────────
+// The system DNS may fail to resolve MongoDB Atlas SRV records (ECONNREFUSED).
+// Setting Google/Cloudflare DNS here fixes the lookup before any module inits.
 const dns = require('dns');
 try {
   dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
+  // Also set on dns.promises — used by the MongoDB Node.js driver's async resolver
+  if (dns.promises && typeof dns.promises.setServers === 'function') {
+    dns.promises.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
+  }
 } catch (err) {
-  // Default DNS fallback
+  // Silently fall back to system DNS if override is unsupported
 }
+
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+const path = require('path');
 
 const express = require('express');
 const mongoose = require('mongoose');
