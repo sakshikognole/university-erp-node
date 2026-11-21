@@ -20,3 +20,9 @@ services:
         value: 7d
       - key: FRONTEND_URL
         sync: false    # Set to your Vercel URL after frontend deploy
+      - key: CLOUDINARY_CLOUD_NAME
+        value: bhsipfy8
+      - key: CLOUDINARY_API_KEY
+        value: 739477432711691
+      - key: CLOUDINARY_API_SECRET
+        sync: false    # Set in Render dashboard — never commit secrets to git
