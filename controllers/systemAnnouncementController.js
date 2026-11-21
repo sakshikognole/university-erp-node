@@ -90,13 +90,15 @@ const extractPublicIdAndType = (url) => {
 
 // ── DOWNLOAD PROXY ────────────────────────────────────────────────────────────
 // Fetches a Cloudinary file server-side and streams it to the browser.
-// This bypasses CORS issues and Cloudinary raw-file delivery restrictions that
-// prevent the browser from directly fetching /raw/upload/ URLs.
+// Accepts an optional ?inline=true query param — when set, serves the file
+// inline (Content-Disposition: inline) so the browser renders it in-tab.
+// Without it (default) the file is served as an attachment (forced download).
 //
-// GET /api/system-announcements/download-proxy?url=<cloudinary_url>
+// GET /api/system-announcements/download-proxy?url=<cloudinary_url>[&inline=true]
 exports.downloadProxy = async (req, res) => {
   try {
-    const { url } = req.query;
+    const { url, inline } = req.query;
+    const serveInline = inline === 'true';
 
     if (!url || typeof url !== 'string') {
       return res.status(400).json({ message: 'url query parameter is required.' });
@@ -126,6 +128,9 @@ exports.downloadProxy = async (req, res) => {
       webp: 'image/webp',
     };
     const contentType = mimeTypes[ext] || 'application/octet-stream';
+    const disposition = serveInline
+      ? `inline; filename="${filename}"`
+      : `attachment; filename="${filename}"`;
 
     // Fetch the file from Cloudinary server-side using built-in https
     const https = require('https');
@@ -139,7 +144,7 @@ exports.downloadProxy = async (req, res) => {
             });
           }
           res.setHeader('Content-Type', contentType);
-          res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+          res.setHeader('Content-Disposition', disposition);
           if (redirected.headers['content-length']) {
             res.setHeader('Content-Length', redirected.headers['content-length']);
           }
@@ -157,9 +162,9 @@ exports.downloadProxy = async (req, res) => {
         });
       }
 
-      // Set response headers for download
+      // Set response headers
       res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Disposition', disposition);
       if (upstream.headers['content-length']) {
         res.setHeader('Content-Length', upstream.headers['content-length']);
       }
