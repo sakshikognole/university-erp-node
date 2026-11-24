@@ -88,7 +88,92 @@ const extractPublicIdAndType = (url) => {
   }
 };
 
-// ── DOWNLOAD PROXY ────────────────────────────────────────────────────────────
+// ── VIEW PROXY ────────────────────────────────────────────────────────────────
+// Returns a self-contained HTML page that embeds the file for in-browser viewing.
+// The page fetches the file from Cloudinary server-side and serves it as a
+// base64 data URI inside an <embed> — no blob URLs, no CORS, no popup issues.
+// Works for PDF (native browser renderer) and images.
+// DOCX is handled on the frontend via Office Online (no proxy needed).
+//
+// GET /api/system-announcements/view-proxy?url=<cloudinary_url>
+exports.viewProxy = async (req, res) => {
+  try {
+    const { url } = req.query;
+
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ message: 'url query parameter is required.' });
+    }
+
+    if (!url.includes('cloudinary.com')) {
+      return res.status(400).json({ message: 'Only Cloudinary URLs can be proxied.' });
+    }
+
+    const urlPath = new URL(url).pathname;
+    const segments = urlPath.split('/');
+    const rawFilename = segments[segments.length - 1] || 'file';
+    const filename = decodeURIComponent(rawFilename.split('?')[0]);
+    const ext = filename.split('.').pop().toLowerCase();
+
+    const mimeTypes = {
+      pdf:  'application/pdf',
+      jpg:  'image/jpeg',
+      jpeg: 'image/jpeg',
+      png:  'image/png',
+      gif:  'image/gif',
+      webp: 'image/webp',
+    };
+    const mimeType = mimeTypes[ext] || 'application/octet-stream';
+
+    // Fetch the file from Cloudinary server-side
+    const https = require('https');
+    const fetchFile = (targetUrl) => new Promise((resolve, reject) => {
+      https.get(targetUrl, (upstream) => {
+        if (upstream.statusCode >= 300 && upstream.statusCode < 400 && upstream.headers.location) {
+          return fetchFile(upstream.headers.location).then(resolve).catch(reject);
+        }
+        if (upstream.statusCode !== 200) {
+          return reject(new Error(`Cloudinary returned HTTP ${upstream.statusCode}`));
+        }
+        const chunks = [];
+        upstream.on('data', (chunk) => chunks.push(chunk));
+        upstream.on('end', () => resolve(Buffer.concat(chunks)));
+        upstream.on('error', reject);
+      }).on('error', reject);
+    });
+
+    const fileBuffer = await fetchFile(url);
+    const base64Data = fileBuffer.toString('base64');
+    const dataUri = `data:${mimeType};base64,${base64Data}`;
+
+    // Return a minimal HTML page that fills the viewport with the file
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${filename}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #525659; }
+    embed, img { width: 100%; height: 100%; display: block; border: none; }
+  </style>
+</head>
+<body>
+  ${mimeType.startsWith('image/')
+    ? `<img src="${dataUri}" alt="${filename}" style="object-fit:contain;background:#000;">`
+    : `<embed src="${dataUri}" type="${mimeType}">`
+  }
+</body>
+</html>`;
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (error) {
+    console.error('Error in viewProxy:', error);
+    res.status(500).send(`<html><body><p>Could not load file: ${error.message}</p></body></html>`);
+  }
+};
+
+
 // Fetches a Cloudinary file server-side and streams it to the browser.
 // Accepts an optional ?inline=true query param — when set, serves the file
 // inline (Content-Disposition: inline) so the browser renders it in-tab.

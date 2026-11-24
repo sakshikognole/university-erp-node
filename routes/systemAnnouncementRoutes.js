@@ -9,9 +9,11 @@ router.use(verifyToken);
 
 // ── Download proxy (any authenticated user) ───────────────────────────────────
 // GET /api/system-announcements/download-proxy?url=<cloudinary_url>
-// Fetches the file server-side and streams it to the browser, bypassing CORS
-// and Cloudinary raw-file delivery restrictions.
 router.get('/download-proxy', controller.downloadProxy);
+
+// ── View proxy — returns an HTML page embedding the file (PDF, image) ─────────
+// GET /api/system-announcements/view-proxy?url=<cloudinary_url>
+router.get('/view-proxy', controller.viewProxy);
 
 // ── Read (all authenticated users — students, teachers, admins) ───────────────
 router.get('/', controller.getAllAnnouncements);
