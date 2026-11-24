@@ -37,6 +37,13 @@ const systemAnnouncementSchema = new mongoose.Schema(
       required: false,
       default: null,
     },
+    // Users who have read/viewed this announcement
+    readBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
   },
   {
     timestamps: true,

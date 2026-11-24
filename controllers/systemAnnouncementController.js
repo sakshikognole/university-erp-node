@@ -540,3 +540,76 @@ exports.deleteAnnouncement = async (req, res) => {
     return res.status(500).json({ message: 'Failed to delete announcement.', error: error.message });
   }
 };
+
+// ── UNREAD COUNT ──────────────────────────────────────────────────────────────
+// GET /api/system-announcements/unread-count
+// Returns the number of announcements the authenticated user has not yet read.
+exports.getUnreadCount = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorised.' });
+    }
+
+    const count = await SystemAnnouncement.countDocuments({
+      readBy: { $not: { $elemMatch: { $eq: new mongoose.Types.ObjectId(userId) } } },
+    });
+
+    return res.status(200).json({ unreadCount: count });
+  } catch (error) {
+    console.error('Error fetching unread count:', error);
+    return res.status(500).json({ message: 'Server error.', error: error.message });
+  }
+};
+
+// ── MARK AS READ ──────────────────────────────────────────────────────────────
+// PATCH /api/system-announcements/:id/read
+// Adds the authenticated user to the readBy array of a single announcement.
+exports.markAsRead = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id || req.user?._id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorised.' });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid announcement ID.' });
+    }
+
+    // $addToSet prevents duplicate entries
+    await SystemAnnouncement.findByIdAndUpdate(
+      id,
+      { $addToSet: { readBy: new mongoose.Types.ObjectId(userId) } },
+      { new: false }
+    );
+
+    return res.status(200).json({ message: 'Marked as read.' });
+  } catch (error) {
+    console.error('Error marking announcement as read:', error);
+    return res.status(500).json({ message: 'Server error.', error: error.message });
+  }
+};
+
+// ── MARK ALL AS READ ──────────────────────────────────────────────────────────
+// PATCH /api/system-announcements/mark-all-read
+// Adds the authenticated user to the readBy array of every announcement.
+exports.markAllAsRead = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorised.' });
+    }
+
+    await SystemAnnouncement.updateMany(
+      { readBy: { $not: { $elemMatch: { $eq: new mongoose.Types.ObjectId(userId) } } } },
+      { $addToSet: { readBy: new mongoose.Types.ObjectId(userId) } }
+    );
+
+    return res.status(200).json({ message: 'All notifications marked as read.' });
+  } catch (error) {
+    console.error('Error marking all as read:', error);
+    return res.status(500).json({ message: 'Server error.', error: error.message });
+  }
+};

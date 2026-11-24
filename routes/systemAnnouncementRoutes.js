@@ -15,6 +15,18 @@ router.get('/download-proxy', controller.downloadProxy);
 // GET /api/system-announcements/view-proxy?url=<cloudinary_url>
 router.get('/view-proxy', controller.viewProxy);
 
+// ── Unread count (any authenticated user) ─────────────────────────────────────
+// GET /api/system-announcements/unread-count
+router.get('/unread-count', controller.getUnreadCount);
+
+// ── Mark all as read (any authenticated user) ─────────────────────────────────
+// PATCH /api/system-announcements/mark-all-read
+router.patch('/mark-all-read', controller.markAllAsRead);
+
+// ── Mark single as read (any authenticated user) ──────────────────────────────
+// PATCH /api/system-announcements/:id/read
+router.patch('/:id/read', controller.markAsRead);
+
 // ── Read (all authenticated users — students, teachers, admins) ───────────────
 router.get('/', controller.getAllAnnouncements);
 router.get('/:id', controller.getAnnouncementById);
