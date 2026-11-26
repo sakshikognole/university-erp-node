@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const feePaymentController = require('../controllers/feePaymentController');
+const verifyToken = require('../middleware/verifyToken');
+
+// All fee routes require authentication
+router.use(verifyToken);
 
 // List fee records with pagination, search, status filtering, and overall summary metrics
 router.get('/', feePaymentController.getFeeRecords);

@@ -8,6 +8,8 @@ const {
   getAcademicResourcesBySubject,
   deleteAcademicResource
 } = require('../controllers/academicResourceController');
+const verifyToken = require('../middleware/verifyToken');
+const authorizeRole = require('../middleware/authorizeRole');
 
 const router = express.Router();
 
@@ -26,6 +28,9 @@ router.get('/test', (req, res) => {
 });
 
 
+// All academic resource operations require authentication
+router.use(verifyToken);
+
 // Get all academic resources
 router.get('/', getAllAcademicResources);
 
@@ -37,17 +42,19 @@ router.get('/download/:id', downloadAcademicResource);
 router.get('/subject/:subject', getAcademicResourcesBySubject);
 
 
-// Upload academic resource
+// Upload academic resource (Admin / Faculty / Staff only)
 router.post(
   '/',
+  authorizeRole('SUPER_ADMIN', 'ADMIN', 'FACULTY', 'STAFF'),
   upload.single('file'),
   uploadAcademicResource
 );
 
 
-// Delete academic resource
+// Delete academic resource (Admin / Faculty / Staff only)
 router.delete(
   '/:id',
+  authorizeRole('SUPER_ADMIN', 'ADMIN', 'FACULTY', 'STAFF'),
   deleteAcademicResource
 );
 

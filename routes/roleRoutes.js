@@ -1,6 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const roleController = require('../controllers/roleController');
+const verifyToken = require('../middleware/verifyToken');
+const authorizeRole = require('../middleware/authorizeRole');
+
+// Require authentication for all role routes (Super admin only)
+router.use(verifyToken, authorizeRole('SUPER_ADMIN'));
 
 // GET /api/roles (List all roles with counts)
 router.get('/', roleController.getRoles);

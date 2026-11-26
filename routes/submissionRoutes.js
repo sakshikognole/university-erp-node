@@ -3,6 +3,8 @@ const express = require('express');
 const router = express.Router();
 
 const upload = require('../middleware/upload');
+const verifyToken = require('../middleware/verifyToken');
+const authorizeRole = require('../middleware/authorizeRole');
 
 const {
   submitAssignment,
@@ -10,6 +12,9 @@ const {
   getStudentSubmission,
   updateMarks
 } = require('../controllers/submissionController');
+
+// All submission routes require authentication
+router.use(verifyToken);
 
 // Student submits assignment
 router.post(
@@ -30,9 +35,10 @@ router.get(
   getSubmissions
 );
 
-// Faculty updates marks
+// Faculty / Staff / Admin updates marks
 router.put(
   '/:submissionId/marks',
+  authorizeRole('SUPER_ADMIN', 'ADMIN', 'FACULTY', 'STAFF'),
   updateMarks
 );
 
