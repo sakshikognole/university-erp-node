@@ -35,10 +35,10 @@ router.get(
   getSubmissions
 );
 
-// Faculty / Staff / Admin updates marks
+// Faculty / Teacher / Staff / Admin updates marks
 router.put(
   '/:submissionId/marks',
-  authorizeRole('SUPER_ADMIN', 'ADMIN', 'FACULTY', 'STAFF'),
+  authorizeRole('SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN', 'FACULTY', 'TEACHER', 'STAFF'),
   updateMarks
 );
 

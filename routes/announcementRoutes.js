@@ -27,19 +27,19 @@ router.use(verifyToken);
 // Get all announcements
 router.get('/', getAllAnnouncements);
 
-// Create announcement (Admin / Faculty / Staff)
-router.post('/', authorizeRole('SUPER_ADMIN', 'ADMIN', 'FACULTY', 'STAFF'), createAnnouncement);
+// Create announcement (Admin / Sub-admin / Faculty / Teacher / Staff)
+router.post('/', authorizeRole('SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN', 'FACULTY', 'TEACHER', 'STAFF'), createAnnouncement);
 router.get('/single/:announcementId', getAnnouncementById);
 // Get announcements by subject
 router.get('/subject/:subjectId', getAnnouncementsBySubject);
 
 // Submit work
 //router.post('/:announcementId/submit', submitWork);
-router.put('/:id/deadline', authorizeRole('SUPER_ADMIN', 'ADMIN', 'FACULTY', 'STAFF'), updateAnnouncementDeadline);
+router.put('/:id/deadline', authorizeRole('SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN', 'FACULTY', 'TEACHER', 'STAFF'), updateAnnouncementDeadline);
 // Get submissions
 router.get('/:announcementId/submissions', getSubmissions);
 
-// Delete announcement (Admin / Faculty / Staff)
-router.delete('/:id', authorizeRole('SUPER_ADMIN', 'ADMIN', 'FACULTY', 'STAFF'), deleteAnnouncement);
+// Delete announcement (Admin / Sub-admin / Faculty / Teacher / Staff)
+router.delete('/:id', authorizeRole('SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN', 'FACULTY', 'TEACHER', 'STAFF'), deleteAnnouncement);
 
 module.exports = router;

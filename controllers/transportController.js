@@ -463,7 +463,7 @@ exports.getRouteById = async (req, res) => {
 // Create bus route
 exports.createRoute = async (req, res) => {
   try {
-    let { routeId, hasCustomName, routeName, driverId, driverName, vehicleId, vehicleName, stops, status } = req.body;
+    let { routeId, hasCustomName, routeName, driverId, driverName, vehicleId, vehicleName, stops, fee, status } = req.body;
 
     if (routeId === undefined || routeId === null || routeId === '') {
       return res.status(400).json({ message: 'Route ID is required (number)' });
@@ -511,6 +511,7 @@ exports.createRoute = async (req, res) => {
       vehicleId: (vehicleId || '').toString().trim(),
       vehicleName: vehicleName.trim(),
       stops: processedStops,
+      fee: fee !== undefined && fee !== null && fee !== '' ? Number(fee) : 0,
       status: status || 'ACTIVE',
     });
 
@@ -526,7 +527,7 @@ exports.createRoute = async (req, res) => {
 exports.updateRoute = async (req, res) => {
   try {
     const { id } = req.params;
-    let { routeId, hasCustomName, routeName, driverId, driverName, vehicleId, vehicleName, stops, status } = req.body;
+    let { routeId, hasCustomName, routeName, driverId, driverName, vehicleId, vehicleName, stops, fee, status } = req.body;
 
     const route = await BusRoute.findOne({
       $or: [{ _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }, { routeId: isNaN(id) ? null : Number(id) }],
@@ -558,6 +559,11 @@ exports.updateRoute = async (req, res) => {
     if (driverId !== undefined) route.driverId = driverId ? Number(driverId) : null;
     if (vehicleName !== undefined) route.vehicleName = vehicleName.trim();
     if (vehicleId !== undefined) route.vehicleId = (vehicleId || '').toString().trim();
+    if (fee !== undefined && fee !== null && fee !== '') {
+      route.fee = Number(fee) || 0;
+    } else if (fee === '' || fee === null) {
+      route.fee = 0;
+    }
     if (status !== undefined) route.status = status;
 
     if (stops !== undefined) {

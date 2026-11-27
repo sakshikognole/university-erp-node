@@ -28,33 +28,30 @@ router.get('/test', (req, res) => {
 });
 
 
+// Download resource file by ID (placed before verifyToken to allow direct browser tab downloads)
+router.get('/download/:id', downloadAcademicResource);
+
 // All academic resource operations require authentication
 router.use(verifyToken);
 
 // Get all academic resources
 router.get('/', getAllAcademicResources);
 
-// Download resource file by ID
-router.get('/download/:id', downloadAcademicResource);
-
-
 // Get resources by subject
 router.get('/subject/:subject', getAcademicResourcesBySubject);
 
-
-// Upload academic resource (Admin / Faculty / Staff only)
+// Upload academic resource (Admin / Sub-admin / Faculty / Teacher / Staff)
 router.post(
   '/',
-  authorizeRole('SUPER_ADMIN', 'ADMIN', 'FACULTY', 'STAFF'),
+  authorizeRole('SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN', 'FACULTY', 'TEACHER', 'STAFF'),
   upload.single('file'),
   uploadAcademicResource
 );
 
-
-// Delete academic resource (Admin / Faculty / Staff only)
+// Delete academic resource (Admin / Sub-admin / Faculty / Teacher / Staff)
 router.delete(
   '/:id',
-  authorizeRole('SUPER_ADMIN', 'ADMIN', 'FACULTY', 'STAFF'),
+  authorizeRole('SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN', 'FACULTY', 'TEACHER', 'STAFF'),
   deleteAcademicResource
 );
 

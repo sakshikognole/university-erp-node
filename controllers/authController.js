@@ -1,7 +1,13 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Student = require('../models/Student');
 const AuditLog = require('../models/AuditLog');
+const {
+  getStudentDefaultPassword,
+  checkStudentPasswordFormat,
+  syncSingleStudentUser,
+} = require('../utils/studentAuthSync');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey_university_erp';
 
@@ -100,18 +106,67 @@ exports.studentLogin = async (req, res) => {
       return res.status(400).json({ message: 'PRN number and password are required' });
     }
 
-    const cleanPrn = prn.trim();
-    const user = await User.findOne({
-      $or: [{ prn: cleanPrn }, { email: cleanPrn.toLowerCase() }],
+    const cleanPrn = prn.trim().toUpperCase();
+    let user = await User.findOne({
+      $or: [
+        { prn: cleanPrn },
+        { prn: cleanPrn.toLowerCase() },
+        { email: cleanPrn.toLowerCase() },
+      ],
     });
 
-    if (!user || user.role !== 'STUDENT') {
-      return res.status(401).json({ message: 'Invalid PRN number or password' });
-    }
+    let studentRecord = null;
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid PRN number or password' });
+    // If user record doesn't exist yet, check the Student collection
+    if (!user) {
+      studentRecord = await Student.findOne({
+        $or: [
+          { prn: cleanPrn },
+          { prn: cleanPrn.toLowerCase() },
+          { email: cleanPrn.toLowerCase() },
+        ],
+      });
+
+      if (!studentRecord) {
+        return res.status(401).json({ message: 'Invalid PRN number or password' });
+      }
+
+      // Check if entered password matches the student's name format (e.g. Sakshi@123)
+      const isFormatMatch = checkStudentPasswordFormat(password, studentRecord.name);
+      if (!isFormatMatch) {
+        return res.status(401).json({ message: 'Invalid PRN number or password' });
+      }
+
+      // Sync user account on-the-fly
+      user = await syncSingleStudentUser(studentRecord);
+      if (!user) {
+        return res.status(500).json({ message: 'Could not initialize student credentials' });
+      }
+    } else {
+      if (user.role !== 'STUDENT') {
+        return res.status(401).json({ message: 'Invalid PRN number or password' });
+      }
+
+      // Verify bcrypt password
+      let isMatch = await bcrypt.compare(password, user.password);
+
+      // Fallback: check student's standard name-based password (e.g. Sakshi@123)
+      if (!isMatch) {
+        if (!studentRecord) {
+          studentRecord = await Student.findOne({ prn: cleanPrn });
+        }
+        const studentName = studentRecord?.name || user.name;
+        if (checkStudentPasswordFormat(password, studentName)) {
+          isMatch = true;
+          // Re-hash and update stored password for future fast bcrypt verification
+          user.password = await bcrypt.hash(password.trim(), 10);
+          await user.save();
+        }
+      }
+
+      if (!isMatch) {
+        return res.status(401).json({ message: 'Invalid PRN number or password' });
+      }
     }
 
     // Log login activity

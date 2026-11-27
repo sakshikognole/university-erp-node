@@ -39,6 +39,11 @@ const busRouteSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    fee: {
+      type: Number,
+      default: 0,
+      min: [0, 'Fee cannot be negative'],
+    },
     status: {
       type: String,
       enum: ['ACTIVE', 'INACTIVE'],

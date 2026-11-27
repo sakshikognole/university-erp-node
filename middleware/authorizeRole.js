@@ -12,11 +12,25 @@ const authorizeRole = (...allowedRoles) => {
         const userRole = String(req.user.role || '').toUpperCase();
         const adminType = String(req.user.adminType || '').toUpperCase();
 
+        const effectiveRoles = new Set([userRole, adminType].filter(Boolean));
+
+        // Administrative equivalence
+        if (effectiveRoles.has('SUPER_ADMIN') || effectiveRoles.has('ADMIN') || effectiveRoles.has('SUB_ADMIN')) {
+            effectiveRoles.add('SUPER_ADMIN');
+            effectiveRoles.add('ADMIN');
+            effectiveRoles.add('SUB_ADMIN');
+        }
+
+        // Teaching / Staff equivalence
+        if (effectiveRoles.has('TEACHER') || effectiveRoles.has('FACULTY') || effectiveRoles.has('STAFF')) {
+            effectiveRoles.add('TEACHER');
+            effectiveRoles.add('FACULTY');
+            effectiveRoles.add('STAFF');
+        }
+
         const hasAccess =
-            flatRoles.includes(userRole) ||
-            flatRoles.includes(adminType) ||
-            userRole === 'SUPER_ADMIN' ||
-            adminType === 'SUPER_ADMIN';
+            flatRoles.some((r) => effectiveRoles.has(r)) ||
+            effectiveRoles.has('SUPER_ADMIN');
 
         if (!hasAccess) {
             return res.status(403).json({

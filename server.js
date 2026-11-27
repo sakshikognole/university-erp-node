@@ -82,9 +82,14 @@ app.use((req, res, next) => {
 });
 
 // MongoDB Connection
+const { syncAllStudentUsers } = require('./utils/studentAuthSync');
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/template-db';
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('Connected to MongoDB'))
+  .then(() => {
+    console.log('Connected to MongoDB');
+    // Ensure all existing students have login accounts in User collection
+    syncAllStudentUsers().catch((e) => console.error('Student user sync warning:', e.message));
+  })
   .catch((err) => console.error('MongoDB connection error:', err.message));
 
 // Start server

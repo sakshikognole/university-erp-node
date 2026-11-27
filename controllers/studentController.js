@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Student = require('../models/Student');
 const AuditLog = require('../models/AuditLog');
 const { validateStudentFields } = require('../utils/studentValidation');
+const { getStudentDefaultPassword, syncSingleStudentUser } = require('../utils/studentAuthSync');
 
 // ---------------------------------------------------------------------------
 // Helper: build a 400 response from a validation-errors object.
@@ -44,7 +45,12 @@ exports.getStudents = async (req, res) => {
     }
 
     const students = await Student.find(filter).sort({ createdAt: -1 });
-    return res.status(200).json(students);
+    const studentsWithCredentials = students.map((s) => {
+      const obj = s.toObject ? s.toObject() : { ...s };
+      obj.defaultPassword = getStudentDefaultPassword(obj.name);
+      return obj;
+    });
+    return res.status(200).json(studentsWithCredentials);
   } catch (error) {
     console.error('Get Students Error:', error);
     return res.status(500).json({ message: 'Error fetching students from database' });
@@ -118,6 +124,9 @@ exports.createStudent = async (req, res) => {
       gender: (req.body.gender || '').trim(),
       customFields: customFields || [],
     });
+
+    // Automatically generate and sync login credentials for this student
+    await syncSingleStudentUser(newStudent);
 
     await AuditLog.create({
       action: 'STUDENT_CREATED',
@@ -196,6 +205,9 @@ exports.updateStudent = async (req, res) => {
     }
 
     await student.save();
+
+    // Sync updated student credentials
+    await syncSingleStudentUser(student);
 
     await AuditLog.create({
       action: 'STUDENT_UPDATED',
@@ -319,6 +331,11 @@ exports.bulkUploadStudents = async (req, res) => {
     }));
 
     const inserted = await Student.insertMany(toInsert, { ordered: true });
+
+    // Sync credentials for all bulk-uploaded students
+    for (const s of inserted) {
+      await syncSingleStudentUser(s);
+    }
 
     await AuditLog.create({
       action: 'BULK_STUDENT_UPLOAD',
