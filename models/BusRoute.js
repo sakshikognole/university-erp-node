@@ -46,8 +46,8 @@ const busRouteSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['ACTIVE', 'INACTIVE'],
-      default: 'ACTIVE',
+      enum: ['ACTIVE', 'INACTIVE', 'Visible', 'Pending', 'VISIBLE', 'PENDING'],
+      default: 'Visible',
     },
   },
   {

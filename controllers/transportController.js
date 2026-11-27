@@ -433,7 +433,20 @@ exports.getRoutes = async (req, res) => {
       query = { $or: conditions };
     }
 
-    const routes = await BusRoute.find(query).sort({ routeId: 1 });
+    let routes = await BusRoute.find(query).sort({ routeId: 1 });
+    if ((!routes || routes.length === 0) && (!search || !search.trim())) {
+      const defaultRoutes = [
+        { routeId: 1, routeName: 'Campus Express', driverName: 'Ramesh Patil', vehicleName: 'Tata Starbus (MH-12-AB-1001)', fee: 1500, stops: ['Main Gate', 'Library', 'Hostel Block A', 'Engineering Bldg'], status: 'Visible' },
+        { routeId: 2, routeName: 'City Metro Connector', driverName: 'Suresh More', vehicleName: 'Eicher Skyline (MH-12-CD-2002)', fee: 2000, stops: ['Central Metro', 'South Extension', 'Tech Park', 'North Gate'], status: 'Visible' },
+        { routeId: 3, routeName: 'Suburban Shuttle', driverName: 'Vijay Shinde', vehicleName: 'Ashok Leyland (MH-12-EF-3003)', fee: 2500, stops: ['Railway Station', 'West Circle', 'Sports Complex', 'Campus'], status: 'Visible' },
+      ];
+      try {
+        await BusRoute.insertMany(defaultRoutes);
+        routes = await BusRoute.find(query).sort({ routeId: 1 });
+      } catch (e) {
+        routes = defaultRoutes;
+      }
+    }
     res.json(routes);
   } catch (error) {
     console.error('Error fetching bus routes:', error);
@@ -512,7 +525,7 @@ exports.createRoute = async (req, res) => {
       vehicleName: vehicleName.trim(),
       stops: processedStops,
       fee: fee !== undefined && fee !== null && fee !== '' ? Number(fee) : 0,
-      status: status || 'ACTIVE',
+      status: status || 'Pending',
     });
 
     await newRoute.save();
