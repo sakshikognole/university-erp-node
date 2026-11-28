@@ -36,6 +36,12 @@ const staffSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    // Department assignment — only relevant for Teacher role but stored for all
+    department: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     bankDetails: {
       bankName: {
         type: String,

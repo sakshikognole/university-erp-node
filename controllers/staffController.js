@@ -1,9 +1,54 @@
 const mongoose = require('mongoose');
-const Staff = require('../models/Staff');
+const bcrypt   = require('bcryptjs');
+const Staff    = require('../models/Staff');
+const User     = require('../models/User');
 const AuditLog = require('../models/AuditLog');
 const { validateStaffFields } = require('../utils/staffValidation');
 
+const TEACHER_ROLES = ['Professor', 'Associate Professor', 'Assistant Professor', 'Lecturer', 'Head of Department', 'Dean', 'Teacher'];
+
+// Default password for all teacher accounts: "Teacher@123"
+const TEACHER_DEFAULT_PASSWORD = 'Teacher@123';
+
+/**
+ * Sync a staff member to the User collection so they can log in.
+ * Only syncs Teacher/Faculty roles.
+ */
+const syncTeacherUser = async (staff) => {
+  try {
+    const isTeacher = TEACHER_ROLES.some(
+      (r) => r.toLowerCase() === (staff.role || '').toLowerCase()
+    );
+    if (!isTeacher) return;
+
+    const existing = await User.findOne({ email: staff.email });
+    if (existing) {
+      // Update department if changed
+      if (existing.department !== staff.department) {
+        existing.department = staff.department || 'General';
+        await existing.save();
+      }
+      return existing;
+    }
+
+    const hashed = await bcrypt.hash(TEACHER_DEFAULT_PASSWORD, 10);
+    const newUser = await User.create({
+      name:      staff.name,
+      email:     staff.email,
+      password:  hashed,
+      role:      'TEACHER',
+      adminType: 'TEACHER',
+      department: staff.department || 'General',
+    });
+    return newUser;
+  } catch (err) {
+    console.error('syncTeacherUser error:', err.message);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Get All Staff Members
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getStaff = async (req, res) => {
   try {
     const staffList = await Staff.find().sort({ createdAt: -1 });
@@ -14,7 +59,9 @@ exports.getStaff = async (req, res) => {
   }
 };
 
-// Get Single Staff Member by ID or staffId
+// ─────────────────────────────────────────────────────────────────────────────
+// Get Single Staff Member
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getStaffById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -38,16 +85,17 @@ exports.getStaffById = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
 // Create New Staff
+// ─────────────────────────────────────────────────────────────────────────────
 exports.createStaff = async (req, res) => {
   try {
-    const { name, staffId, email, phone, dateOfJoining, role, bankDetails } = req.body;
+    const { name, staffId, email, phone, dateOfJoining, role, department, bankDetails } = req.body;
 
     if (!name || !staffId || !email || !phone || !dateOfJoining || !role) {
       return res.status(400).json({ message: 'Name, Staff ID, Email, Phone, Date of Joining, and Role are required' });
     }
 
-    // Run field-level validation
     const { errors, isValid } = validateStaffFields({ name, staffId, email, phone, role });
     if (!isValid) {
       const firstError = Object.values(errors)[0];
@@ -55,54 +103,49 @@ exports.createStaff = async (req, res) => {
     }
 
     const cleanStaffId = staffId.trim().toUpperCase();
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanPhone = phone.trim().replace(/\s/g, '');
+    const cleanEmail   = email.trim().toLowerCase();
+    const cleanPhone   = phone.trim().replace(/\s/g, '');
 
-    // Staff ID uniqueness
     const existingStaff = await Staff.findOne({ staffId: cleanStaffId });
     if (existingStaff) {
-      return res.status(409).json({
-        message: `A staff member with ID '${cleanStaffId}' already exists`,
-      });
+      return res.status(409).json({ message: `A staff member with ID '${cleanStaffId}' already exists` });
     }
 
-    // Email uniqueness
     const existingEmail = await Staff.findOne({ email: cleanEmail });
     if (existingEmail) {
-      return res.status(409).json({
-        message: `A staff member with email '${cleanEmail}' already exists`,
-      });
+      return res.status(409).json({ message: `A staff member with email '${cleanEmail}' already exists` });
     }
 
-    // Phone uniqueness
     const existingPhone = await Staff.findOne({ phone: cleanPhone });
     if (existingPhone) {
-      return res.status(409).json({
-        message: `A staff member with phone number '${cleanPhone}' already exists`,
-      });
+      return res.status(409).json({ message: `A staff member with phone number '${cleanPhone}' already exists` });
     }
 
     const newStaff = await Staff.create({
-      name: name.trim(),
-      staffId: cleanStaffId,
-      email: cleanEmail,
-      phone: cleanPhone,
+      name:          name.trim(),
+      staffId:       cleanStaffId,
+      email:         cleanEmail,
+      phone:         cleanPhone,
       dateOfJoining: new Date(dateOfJoining),
-      role: role.trim(),
+      role:          role.trim(),
+      department:    (department || '').trim(),
       bankDetails: {
-        bankName: bankDetails?.bankName?.trim() || '',
+        bankName:          bankDetails?.bankName?.trim()          || '',
         accountHolderName: bankDetails?.accountHolderName?.trim() || '',
-        accountNumber: bankDetails?.accountNumber?.trim() || '',
-        ifscCode: bankDetails?.ifscCode?.trim().toUpperCase() || '',
+        accountNumber:     bankDetails?.accountNumber?.trim()      || '',
+        ifscCode:          bankDetails?.ifscCode?.trim().toUpperCase() || '',
       },
     });
 
+    // Sync teacher to User collection for login
+    await syncTeacherUser(newStaff);
+
     await AuditLog.create({
-      action: 'STAFF_CREATED',
+      action:      'STAFF_CREATED',
       performedBy: req.user?.email || 'superadmin@university.edu',
-      target: `${newStaff.name} (${newStaff.staffId})`,
-      status: 'SUCCESS',
-      details: `Created new staff member ${newStaff.staffId}`,
+      target:      `${newStaff.name} (${newStaff.staffId})`,
+      status:      'SUCCESS',
+      details:     `Created new staff member ${newStaff.staffId}`,
     });
 
     return res.status(201).json({
@@ -115,17 +158,18 @@ exports.createStaff = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
 // Update Staff Member
+// ─────────────────────────────────────────────────────────────────────────────
 exports.updateStaff = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, staffId, email, phone, dateOfJoining, role, bankDetails } = req.body;
+    const { name, staffId, email, phone, dateOfJoining, role, department, bankDetails } = req.body;
 
     if (!name || !staffId || !email || !phone || !dateOfJoining || !role) {
       return res.status(400).json({ message: 'Name, Staff ID, Email, Phone, Date of Joining, and Role are required' });
     }
 
-    // Run field-level validation
     const { errors, isValid } = validateStaffFields({ name, staffId, email, phone, role });
     if (!isValid) {
       const firstError = Object.values(errors)[0];
@@ -145,62 +189,58 @@ exports.updateStaff = async (req, res) => {
     }
 
     const cleanStaffId = staffId.trim().toUpperCase();
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanPhone = phone.trim().replace(/\s/g, '');
+    const cleanEmail   = email.trim().toLowerCase();
+    const cleanPhone   = phone.trim().replace(/\s/g, '');
 
-    // Check staffId uniqueness if changed
     if (cleanStaffId !== staffMember.staffId) {
       const existingStaff = await Staff.findOne({ staffId: cleanStaffId });
       if (existingStaff && existingStaff._id.toString() !== staffMember._id.toString()) {
-        return res.status(409).json({
-          message: `A staff member with ID '${cleanStaffId}' already exists`,
-        });
+        return res.status(409).json({ message: `A staff member with ID '${cleanStaffId}' already exists` });
       }
       staffMember.staffId = cleanStaffId;
     }
 
-    // Check email uniqueness if changed
     if (cleanEmail !== staffMember.email) {
       const existingEmail = await Staff.findOne({ email: cleanEmail });
       if (existingEmail && existingEmail._id.toString() !== staffMember._id.toString()) {
-        return res.status(409).json({
-          message: `A staff member with email '${cleanEmail}' already exists`,
-        });
+        return res.status(409).json({ message: `A staff member with email '${cleanEmail}' already exists` });
       }
       staffMember.email = cleanEmail;
     }
 
-    // Check phone uniqueness if changed — allow own unchanged phone
     if (cleanPhone !== staffMember.phone) {
       const existingPhone = await Staff.findOne({ phone: cleanPhone });
       if (existingPhone && existingPhone._id.toString() !== staffMember._id.toString()) {
-        return res.status(409).json({
-          message: `A staff member with phone number '${cleanPhone}' already exists`,
-        });
+        return res.status(409).json({ message: `A staff member with phone number '${cleanPhone}' already exists` });
       }
       staffMember.phone = cleanPhone;
     }
 
-    staffMember.name = name.trim();
+    staffMember.name          = name.trim();
     staffMember.dateOfJoining = new Date(dateOfJoining);
-    staffMember.role = role.trim();
+    staffMember.role          = role.trim();
+    staffMember.department    = (department || '').trim();
+
     if (bankDetails) {
       staffMember.bankDetails = {
-        bankName: bankDetails?.bankName?.trim() || '',
+        bankName:          bankDetails?.bankName?.trim()          || '',
         accountHolderName: bankDetails?.accountHolderName?.trim() || '',
-        accountNumber: bankDetails?.accountNumber?.trim() || '',
-        ifscCode: bankDetails?.ifscCode?.trim().toUpperCase() || '',
+        accountNumber:     bankDetails?.accountNumber?.trim()      || '',
+        ifscCode:          bankDetails?.ifscCode?.trim().toUpperCase() || '',
       };
     }
 
     await staffMember.save();
 
+    // Keep User record in sync (department may have changed)
+    await syncTeacherUser(staffMember);
+
     await AuditLog.create({
-      action: 'STAFF_UPDATED',
+      action:      'STAFF_UPDATED',
       performedBy: req.user?.email || 'superadmin@university.edu',
-      target: `${staffMember.name} (${staffMember.staffId})`,
-      status: 'SUCCESS',
-      details: `Updated staff record for ${staffMember.staffId}`,
+      target:      `${staffMember.name} (${staffMember.staffId})`,
+      status:      'SUCCESS',
+      details:     `Updated staff record for ${staffMember.staffId}`,
     });
 
     return res.status(200).json({

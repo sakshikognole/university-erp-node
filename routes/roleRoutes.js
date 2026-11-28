@@ -1,22 +1,21 @@
-const express = require('express');
-const router = express.Router();
+const express    = require('express');
+const router     = express.Router();
 const roleController = require('../controllers/roleController');
-const verifyToken = require('../middleware/verifyToken');
-const authorizeRole = require('../middleware/authorizeRole');
+const verifyToken    = require('../middleware/verifyToken');
+const authorizeRole  = require('../middleware/authorizeRole');
 
-// Require authentication for all role routes (Super admin only)
-router.use(verifyToken, authorizeRole('SUPER_ADMIN'));
+// ── Authenticated routes (all logged-in users can fetch role permissions) ──
+router.use(verifyToken);
 
-// GET /api/roles (List all roles with counts)
+// GET /api/roles — list all roles (any authenticated user; frontend needs it for page-perm checks)
 router.get('/', roleController.getRoles);
 
-// POST /api/roles (Create new custom role)
-router.post('/', roleController.createRole);
+// GET /api/roles/pages — list all assignable page paths
+router.get('/pages', authorizeRole('SUPER_ADMIN'), roleController.getAvailablePages);
 
-// PUT /api/roles/:id (Update role details & permissions)
-router.put('/:id', roleController.updateRole);
-
-// DELETE /api/roles/:id (Delete custom role)
-router.delete('/:id', roleController.deleteRole);
+// SUPER_ADMIN-only write operations
+router.post('/',    authorizeRole('SUPER_ADMIN'), roleController.createRole);
+router.put('/:id',  authorizeRole('SUPER_ADMIN'), roleController.updateRole);
+router.delete('/:id', authorizeRole('SUPER_ADMIN'), roleController.deleteRole);
 
 module.exports = router;

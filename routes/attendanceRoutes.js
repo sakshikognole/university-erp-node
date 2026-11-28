@@ -1,22 +1,27 @@
-const express = require('express');
-const router = express.Router();
+const express    = require('express');
+const router     = express.Router();
 const attendanceController = require('../controllers/attendanceController');
-const verifyToken = require('../middleware/verifyToken');
+const verifyToken   = require('../middleware/verifyToken');
 const authorizeRole = require('../middleware/authorizeRole');
 
-// All attendance routes require a valid token
 router.use(verifyToken);
 
-// GET  /api/attendance/session  — returns dummy session meta + full student roster
-router.get('/session', attendanceController.getSession);
+// GET /api/attendance/session — real student roster (admin + teacher + student)
+router.get('/session',
+  authorizeRole('SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN', 'FACULTY', 'TEACHER', 'STAFF', 'STUDENT'),
+  attendanceController.getSession
+);
 
-// POST /api/attendance/submit   — submit a completed attendance sheet (Admin / Sub-admin / Faculty / Teacher / Staff)
-router.post('/submit', authorizeRole('SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN', 'FACULTY', 'TEACHER', 'STAFF'), attendanceController.submitAttendance);
+// POST /api/attendance/submit — submit attendance (admin + teacher only)
+router.post('/submit',
+  authorizeRole('SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN', 'FACULTY', 'TEACHER', 'STAFF'),
+  attendanceController.submitAttendance
+);
 
-// GET  /api/attendance           — list all saved attendance records
+// GET /api/attendance — list records; supports ?prn=<PRN> for student view
 router.get('/', attendanceController.getAllAttendance);
 
-// GET  /api/attendance/:id       — get one attendance record by id
+// GET /api/attendance/:id — single record
 router.get('/:id', attendanceController.getAttendanceById);
 
 module.exports = router;

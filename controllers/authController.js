@@ -17,6 +17,7 @@ const formatUserResponse = (user) => {
     {
       id: user._id,
       email: user.email,
+      prn: user.prn || null,
       role: user.role,
       adminType: user.adminType,
     },

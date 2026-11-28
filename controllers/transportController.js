@@ -773,6 +773,50 @@ exports.createPass = async (req, res) => {
     });
 
     await newPass.save();
+
+    // ── Auto-create FeePayment record when pass is issued as PENDING ───────
+    // This ensures the student can pay through the existing Fee Payment module.
+    // Prevents duplicate records if one already exists for this student + route.
+    if ((paymentStatus || 'PAID') === 'PENDING') {
+      try {
+        const FeePayment = require('../models/FeePayment');
+        const route = await BusRoute.findOne({ routeId: Number(routeId) }).lean();
+        const routeTitle = (route?.routeName && route.routeName.trim())
+          ? route.routeName.trim()
+          : `Route #${routeId}`;
+        const transportFeeTitle = `Transport Fee – ${routeTitle}`;
+        const feeAmount = route?.fee || 0;
+
+        // Idempotent: skip if a transport fee record already exists for this student
+        const existing = await FeePayment.findOne({
+          prn: student.prn,
+          feeType: { $regex: `Route #${routeId}|${routeTitle}`, $options: 'i' },
+        });
+
+        if (!existing && feeAmount > 0) {
+          await FeePayment.create({
+            prn: student.prn,
+            studentName: student.name,
+            class: student.class || 'N/A',
+            division: student.division || '',
+            degree: student.degree || 'N/A',
+            academicYear: new Date().getFullYear() + '-' + (new Date().getFullYear() + 1),
+            semester: 'Transport',
+            feeType: transportFeeTitle,
+            totalFeeAmount: feeAmount,
+            discountAmount: 0,
+            paidAmount: 0,
+            remainingAmount: feeAmount,
+            status: 'PENDING',
+          });
+        }
+      } catch (feeErr) {
+        // Non-fatal — pass was already saved
+        console.error('Auto FeePayment record creation error (non-fatal):', feeErr.message);
+      }
+    }
+    // ── End Auto FeePayment ────────────────────────────────────────────────
+
     res.status(201).json({ message: 'Bus Pass issued successfully!', pass: newPass });
   } catch (error) {
     console.error('Error creating bus pass:', error);
@@ -859,5 +903,82 @@ exports.deletePass = async (req, res) => {
   } catch (error) {
     console.error('Error deleting bus pass:', error);
     res.status(500).json({ message: 'Failed to delete bus pass', error: error.message });
+  }
+};
+
+// ==========================================
+// STUDENT — MY TRANSPORT (AUTHENTICATED)
+// GET /api/transport/my-pass
+// Returns the logged-in student's bus pass + route details.
+// Identity comes exclusively from req.user (JWT); no PRN in query/body.
+// ==========================================
+exports.getMyPass = async (req, res) => {
+  try {
+    // JWT payload set by verifyToken: { id, email, role, adminType }
+    // Student login also embeds prn via authController formatUserResponse.
+    // We look up the student record by user._id or prn.
+    const userId  = req.user?.id;
+    const userPrn = req.user?.prn;
+
+    // Find the User record to get the PRN (student login stores prn in JWT via User.prn)
+    let prn = null;
+    if (userPrn) {
+      prn = userPrn.trim().toUpperCase();
+    } else if (userId) {
+      const User = require('../models/User');
+      const userDoc = await User.findById(userId).lean();
+      if (userDoc?.prn) prn = userDoc.prn.trim().toUpperCase();
+    }
+
+    if (!prn) {
+      return res.status(400).json({ message: 'Could not resolve student PRN from token.' });
+    }
+
+    // Find bus pass by student PRN (case-insensitive)
+    const pass = await BusPass.findOne({
+      $or: [
+        { studentId: prn },
+        { studentId: prn.toLowerCase() },
+        { studentId: new RegExp(`^${prn}$`, 'i') },
+      ],
+    }).lean();
+
+    if (!pass) {
+      return res.status(404).json({ assigned: false, message: 'No bus pass assigned to your account.' });
+    }
+
+    // Fetch the full route details
+    const route = await BusRoute.findOne({ routeId: pass.routeId }).lean();
+
+    // Fetch the fee payment record for this student + transport fee type
+    // Sort by updatedAt descending to get the most recently updated record
+    const FeePayment = require('../models/FeePayment');
+    let transportFeeRecord = await FeePayment.findOne({
+      prn: prn,
+      $or: [
+        { feeType: { $regex: /transport/i } },
+        { feeType: { $regex: /bus/i } },
+        { feeType: { $regex: `Route #${pass.routeId}` } },
+      ],
+    }).sort({ updatedAt: -1 }).lean();
+
+    // Broaden search if still not found — look for any fee record matching route name
+    if (!transportFeeRecord && route) {
+      const routeTitle = route.routeName || `Route #${route.routeId}`;
+      transportFeeRecord = await FeePayment.findOne({
+        prn: prn,
+        feeType: { $regex: routeTitle, $options: 'i' },
+      }).sort({ updatedAt: -1 }).lean();
+    }
+
+    return res.status(200).json({
+      assigned: true,
+      pass,
+      route: route || null,
+      feeRecord: transportFeeRecord || null,
+    });
+  } catch (error) {
+    console.error('Error fetching student transport pass:', error);
+    res.status(500).json({ message: 'Failed to fetch your transport details', error: error.message });
   }
 };

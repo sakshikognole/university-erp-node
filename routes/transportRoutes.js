@@ -47,4 +47,11 @@ router.delete('/passes/:id', verifyToken, authorizeRole('SUPER_ADMIN', 'ADMIN', 
 // Student verification route for bus passes
 router.get('/verify-student/:prn', verifyToken, authorizeRole('SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN', 'STUDENT'), transportController.verifyStudentByPRN);
 
+// ==========================================
+// STUDENT — MY TRANSPORT (must be before /:id catch-all)
+// Returns the authenticated student's bus pass, route & fee record.
+// Identity resolved from JWT only — no PRN in URL/body.
+// ==========================================
+router.get('/my-pass', verifyToken, authorizeRole('STUDENT'), transportController.getMyPass);
+
 module.exports = router;

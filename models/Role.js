@@ -28,6 +28,12 @@ const roleSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    // Page-level access control — array of route paths or page keys
+    // e.g. ['/attendance', '/students', '/books']
+    allowedPages: {
+      type: [String],
+      default: [],
+    },
     isSystemRole: {
       type: Boolean,
       default: false,
