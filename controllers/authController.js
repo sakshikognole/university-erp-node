@@ -88,8 +88,17 @@ exports.adminLogin = async (req, res) => {
       details: `${user.name} logged in as ${adminType}`,
     }).catch(err => console.error('AuditLog error:', err.message));
 
+    // Build a role-aware success message
+    const roleLabels = {
+      SUPER_ADMIN: 'Super Admin',
+      SUB_ADMIN: 'Sub Admin',
+      TEACHER: 'Teacher',
+      FACULTY: 'Teacher',
+    };
+    const roleLabel = roleLabels[adminType] || roleLabels[user.role] || 'Admin';
+
     return res.status(200).json({
-      message: 'Admin login successful',
+      message: `${roleLabel} login successful`,
       user: formatUserResponse(user),
     });
   } catch (error) {
